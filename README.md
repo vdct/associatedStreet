@@ -2,7 +2,7 @@ addr2associatedStreet.py : regroupement des adresses du cadastre dans des relati
 
 En entrée : les fichiers de type parcelles-adresses.osm produits ici : http://37.187.60.59/cadastre-housenumber/adresses.php
 
-En sortie, un répertoire "fichiers_"+<nom du fichier d'adresses> dans le répertoire du script.
+En sortie, un répertoire "fichiers_"+"nom du fichier d'adresses" dans le répertoire du script.
 
 Les fichier en sortie reprennent toutes les adresses indiquées en entrée, dès lors qu'elles commencent par un numéro. Un point d'adresse est fabriqué pour chaque numéro. Lorsque plusieurs points correspondent au même numero dans le fichier d'entrée, c'est la moyenne des coordonnées des points qui est utilisée en sortie.
 Chaque point (node) a un unique tag : addr:housenumber.
