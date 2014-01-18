@@ -3,8 +3,10 @@ import xml.etree.ElementTree as ET
 import fonctions as f
 
 fnin  = raw_input('fichier parcelles-adresses : ')
-fnout = fnin.replace('.osm','_associatedStreet.osm')
-
+dirout = 'fichiers_'+fnin.replace('.osm','')
+if not os.path.exists(dirout):
+	os.mkdir(dirout)
+	
 fnfantoir = raw_input('Fichier Fantoir : ')
 dict_fantoir = f.rivoli_brut_vers_dict(fnfantoir)
 
@@ -45,18 +47,17 @@ for r in dict_global:
 		id_node -= 1
 		dict_final[r][a] = [str(id_node),str(lon),str(lat)]
 
-fout = open(fnout,'w')
-fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr2associatedStreet.py\">\n")
-
 nb_voies_total = 0
 nb_voies_fantoir = 0
 for r in dict_final:
+	fout = open(dirout+'/'+r.replace(' ','_')+'.osm','w')
+	fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr2associatedStreet.py\">\n")
 	for a in dict_final[r]:
 		fout.write("	<node lat=\""+dict_final[r][a][2]+"\" lon=\""+dict_final[r][a][1]+"\" id=\""+dict_final[r][a][0]+"\">\n")
 		fout.write("		<tag k=\"addr:housenumber\" v=\""+a+"\"/>\n")
 		fout.write("	</node>\n")
-for r in dict_final:
+#for r in dict_final:
 	cle_fantoir = r.replace('-',' ')
 	id_node -= 1
 	fout.write("	<relation id=\""+str(id_node)+"\" action=\"modify\" visible=\"true\">\n")
@@ -71,8 +72,8 @@ for r in dict_final:
 		print('Pas de rapprochement FANTOIR pour : '+r)
 	fout.write("	</relation>\n")
 	nb_voies_total +=1
-fout.write("</osm>")
-fout.close()
+	fout.write("</osm>")
+	fout.close()
 
 print("Nombre de relations creees : "+str(nb_voies_total))
 print("Dont avec code FANTOIR     : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)")
