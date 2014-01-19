@@ -1,3 +1,14 @@
+addrfantoir.py : recherche du code FANTOIR des voies pour enrichissement d'un fichier d'adresses déjà regroupées en relations associatedStreet.
+Le fichier des relations provient de http://37.187.60.59/cadastre-housenumber/adresses.php
+En local, il faut dans le répertoire où se situe ce fichier ET le script python, ajouter le fichier Fantoir brut du département correspondant, obtenu (par zip de régions) ici :
+http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits
+
+Le script a ensuite besoin de 2 paramètres : le nom du fichier d'adresses, et le code INSEE de la commune correspondante (pour filtrer les bonnes entrées du FANTOIR)
+
+En sortie : un répertoire "fichiers_"+ le nom du fichier d'adresses avec autant de fichiers .osm que de relations associatedStreet créées. Un fichier additionnel peut être crée, nommé "numeros_ambigus_a_verifier.osm" si des adresses contenaient en entrée un tag 'fixme'
+
+******************************************
+
 addr2associatedStreet.py : regroupement des adresses du cadastre dans des relations "associatedStreet"
 
 En entrée : les fichiers de type parcelles-adresses.osm produits ici : http://37.187.60.59/cadastre-housenumber/adresses.php
