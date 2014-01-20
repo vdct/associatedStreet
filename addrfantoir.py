@@ -14,13 +14,51 @@ code_insee = raw_input('Code INSEE : ')
 fnfantoir = code_insee[0:2]+'0.txt'
 if not os.path.exists(fnfantoir):
 	print('Fichier FANTOIR "'+fnfantoir+'" absent du répertoire')
+	print('Telechargeable ici : http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits')
 	print('Abandon')
 	os._exit(0)
 	
 dict_fantoir = f.rivoli_dept_vers_dict(fnfantoir,code_insee)
 
-xmldoc = ET.parse(fnin)
+dict_osm_insee = f.get_dict_osm_insee()
 
+highway_rep = 'cache_highways'
+if not os.path.exists(highway_rep):
+	os.mkdir(highway_rep)
+	
+fnhighway = highway_rep+'/highways_'+code_insee+'.osm'
+if not os.path.exists(fnhighway):
+	highway_url = "http://overpass-api.de/api/interpreter?data=way%0A%20%20(area%3A"+str(3600000000+dict_osm_insee[code_insee])+")%0A%20%20%5B%22highway%22%5D%5B%22name%22%5D%3B%0Aout%20meta%3B"
+	print("téléchargement des ways OSM...")
+	try:
+		resp = urllib2.urlopen(highway_url)
+		fhighway = open(fnhighway,'wb')
+		fhighway.write(resp.read())
+		fhighway.close()
+		print("ok")
+	except urllib2.HTTPError:
+		print('\n******* récupération KO ********')
+		print('Abandon')
+		os._exit(0)
+		
+print('mise en cache des voies...')
+
+dict_ways_osm = {}
+xmlways = ET.parse(fnhighway)
+for w in xmlways.iter('way'):
+	for t in w.iter('tag'):
+		if t.get('k') == 'name':
+			name_osm = t.get('v')
+
+	name_norm = f.normalize(name_osm)
+	if name_norm not in dict_ways_osm:
+		dict_ways_osm[name_norm] = {'name':name_osm,'ids':[]}
+	dict_ways_osm[name_norm]['ids'].append(w.get('id'))
+
+for v in dict_ways_osm.viewkeys():
+	print(v)
+	
+xmldoc = ET.parse(fnin)
 dict_nodes = {}
 for w in xmldoc.iter('node'):
 	dict_nodes[w.get('id')] = {'prop':{},'tag':{}}
@@ -43,9 +81,12 @@ for w in xmldoc.iter('relation'):
 		
 nb_voies_total = 0
 nb_voies_fantoir = 0
+nb_voies_osm = 0
 for r in dict_rels:
 	rel_name = dict_rels[r]['name'];
-	fout = open(dirout+'/'+rel_name.replace(' ','_')+'.osm','w')
+	rel_name_norm = f.normalize(rel_name)
+	
+	fout = open(dirout+'/'+rel_name_norm+'.osm','w')
 	fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addrfantoir.py\">\n")
 
@@ -57,17 +98,22 @@ for r in dict_rels:
 		fout.write("	</node>\n")
 		min_id = min(min_id,int(a))
 		
-	cle_fantoir = rel_name.replace('-',' ')
-
 	fout.write("	<relation id=\""+str(min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
 	for a in dict_rels[r]['nodes']:
 		fout.write("		<member type=\"node\" ref=\""+a+"\" role=\"house\"/>\n")
 	street_name = rel_name.title()
-
+	
+	if rel_name_norm in dict_ways_osm:
+		street_name =  dict_ways_osm[rel_name_norm]['name'].encode('utf8')
+		for m in dict_ways_osm[rel_name_norm]['ids']:
+			fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
+		nb_voies_osm += 1
+	else:
+		print('***'+rel_name_norm)
 	fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
 	fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
-	if cle_fantoir in dict_fantoir:
-		fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dict_fantoir[cle_fantoir]+"\"/>\n")
+	if rel_name_norm in dict_fantoir:
+		fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dict_fantoir[rel_name_norm]+"\"/>\n")
 		nb_voies_fantoir += 1
 	else:
 		print('Pas de rapprochement FANTOIR pour : '+rel_name)
@@ -92,8 +138,9 @@ for a in dict_nodes:
 fout.write("</osm>")
 fout.close()
 	
-print("Nombre de relations creees : "+str(nb_voies_total))
-print("Dont avec code FANTOIR     : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)")
+print("Nombre de relations creees  : "+str(nb_voies_total))
+print("     avec code FANTOIR      : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)")
+print("     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm*100/nb_voies_total))+"%)")
 if nb_ambigu > 0:
 	print(str(nb_ambigu)+" points addresses à affecter manuellement a la bonne rue")
 	print("Voir le fichier numeros_ambigus_a_verifier.osm")
