@@ -1,9 +1,11 @@
 addrfantoir.py : recherche du code FANTOIR des voies pour enrichissement d'un fichier d'adresses déjà regroupées en relations associatedStreet.
 Le fichier des relations provient de http://37.187.60.59/cadastre-housenumber/adresses.php
-En local, il faut dans le répertoire où se situe ce fichier ET le script python, ajouter le fichier Fantoir brut du département correspondant, obtenu (par zip de régions) ici :
+En local, il faut dans le répertoire où se situe ce fichier ET le script python, ajouter :
+- le fichier Fantoir brut du département correspondant, obtenu (par zip de régions) ici :
 http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits
+- le fichier osm_id_ref_insee.csv qui donne pour chaque code INSEE le n° de relation admin 8 dans OSM. Cette relation est utilisée pour extraire tous les highways nommés de la commune, via un appel Overpass
 
-Le script a ensuite besoin de 2 paramètres : le nom du fichier d'adresses, et le code INSEE de la commune correspondante (pour filtrer les bonnes entrées du FANTOIR)
+Le script a besoin de 2 paramètres : le nom du fichier d'adresses, et le code INSEE de la commune correspondante (pour filtrer les bonnes entrées du FANTOIR et interroger l'Overpass)
 
 En sortie : un répertoire "fichiers_"+ le nom du fichier d'adresses avec autant de fichiers .osm que de relations associatedStreet créées. Un fichier additionnel peut être crée, nommé "numeros_ambigus_a_verifier.osm" si des adresses contenaient en entrée un tag 'fixme'
 
