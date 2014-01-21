@@ -44,15 +44,44 @@ def normalize(s):
 	s = s.upper()				# tout en majuscules
 	s = s.replace('-',' ')		# separateur espace
 	s = s.replace('\'',' ')		# separateur espace
+	s = s.replace('/',' ')		# separateur espace
 	s = ' '.join(s.split())		# separateur : 1 espace
 	for l in iter(dict_replace_lettres.viewkeys()):
 		for ll in dict_replace_lettres[l]:
 			s = s.replace(ll,l)
 	
 	spart = s.partition(' ')
-	if spart[0] in dict_abbrev_debut:
-		s = dict_abbrev_debut[spart[0]]+' '+spart[2]
-		
+	s_comp = spart[0]
+	s_reste = spart[2]
+	
+	abrev_trouvee = False
+	nb_parts = len(s.split())
+	
+	# type de voie
+	if s_comp in dict_abbrev_debut:
+		s = dict_abbrev_debut[s_comp]+' '+s_reste
+		abrev_trouvee = True
+	if not abrev_trouvee and nb_parts > 3:
+		s_comp = s_comp+' '+s_reste.partition(' ')[0]
+		s_reste = s_reste.partition(' ')[2]
+		if s_comp in dict_abbrev_debut:
+			s = dict_abbrev_debut[s_comp]+' '+s_reste
+			abrev_trouvee = True
+	if not abrev_trouvee and nb_parts > 4:
+		s_comp = s_comp+' '+s_reste.partition(' ')[0]
+		s_reste = s_reste.partition(' ')[2]
+		if s_comp in dict_abbrev_debut:
+			s = dict_abbrev_debut[s_comp]+' '+s_reste
+			abrev_trouvee = True
+	
+	# chiffres
+	s = s.replace('0','ZERO').replace('1','UN').replace('2','DEUX').replace('3','TROIS').replace('4','QUATRE').replace('5','CINQ').replace('6','SIX').replace('7','SEPT').replace('8','HUIT').replace('9','NEUF')
+	
+	# articles
+	list_replace_blanc = ['DE LA','DU','DES','LE','LA','LES']
+	for r in list_replace_blanc:
+		s = s.replace(' '+r+' ',' ')
+	
 	return s
 	
 def get_dict_replace_lettres():
@@ -60,7 +89,7 @@ def get_dict_replace_lettres():
 							'C':[u'Ç'],
 							'E':[u'È',u'Ê',u'É',u'Ë'],
 							'I':[u'Ï',u'Î'],
-							'O':[u'Ö'],
+							'O':[u'Ö',u'Ô'],
 							'U':[u'Û',u'Ü']}
 	return dict_replace_lettres
 
@@ -143,6 +172,7 @@ def get_dict_abbrev_debut():
 							'GARE':'GARE',
 							'GRAND BOULEVARD':'GBD',
 							'GRAND PLACE':'GPL',
+							'GR GRANDE RUE':'GR',
 							'GRANDE RUE':'GR',
 							'HABITATION':'HAB',
 							'HAMEAU':'HAM',
@@ -170,6 +200,7 @@ def get_dict_abbrev_debut():
 							'PARC':'PARC',
 							'PASSAGE':'PAS',
 							'PASSE':'PASS',
+							'PCH PETIT CHEMIN':'PCH',
 							'PETIT CHEMIN':'PCH',
 							'PHARE':'PHAR',
 							'PISTE':'PIST',
@@ -194,6 +225,7 @@ def get_dict_abbrev_debut():
 							'PETITE ALLEE':'PTA',
 							'PORTE':'PTE',
 							'PETITE RUE':'PTR',
+							'PTR PETITE RUE':'PTR',
 							'PLACETTE':'PTTE',
 							'QUARTIER':'QUA',
 							'QUAI':'QUAI',

@@ -55,9 +55,15 @@ for w in xmlways.iter('way'):
 		dict_ways_osm[name_norm] = {'name':name_osm,'ids':[]}
 	dict_ways_osm[name_norm]['ids'].append(w.get('id'))
 
-for v in dict_ways_osm.viewkeys():
-	print(v)
-	
+fntmpkeys = 'cles_noms_de_voies.txt'
+ftmpkeys = open(fntmpkeys,'w')
+ftmpkeys.write('--noms de voies OSM--\n')
+for v in sorted(dict_ways_osm):
+	ftmpkeys.write(v.encode('utf8')+'\n')
+ftmpkeys.write('---------------------\n')
+
+print('mise en cache des adresses...')
+
 xmldoc = ET.parse(fnin)
 dict_nodes = {}
 for w in xmldoc.iter('node'):
@@ -82,6 +88,7 @@ for w in xmldoc.iter('relation'):
 nb_voies_total = 0
 nb_voies_fantoir = 0
 nb_voies_osm = 0
+print('rapprochement...')
 for r in dict_rels:
 	rel_name = dict_rels[r]['name'];
 	rel_name_norm = f.normalize(rel_name)
@@ -94,7 +101,8 @@ for r in dict_rels:
 	for a in dict_rels[r]['nodes']:
 		n = dict_nodes[a]
 		fout.write("	<node lat=\""+n['prop']['lat']+"\" lon=\""+n['prop']['lon']+"\" id=\""+a+"\">\n")
-		fout.write("		<tag k=\"addr:housenumber\" v=\""+n['tag']['addr:housenumber']+"\"/>\n")
+		for k,v in n['tag'].iteritems():
+			fout.write('		<tag k="'+k+' v="'+v+'"/>\n')
 		fout.write("	</node>\n")
 		min_id = min(min_id,int(a))
 		
@@ -109,18 +117,20 @@ for r in dict_rels:
 			fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
 		nb_voies_osm += 1
 	else:
-		print('***'+rel_name_norm)
+		ftmpkeys.write('Pas OSM     : '+rel_name+'\n')
 	fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
 	fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
 	if rel_name_norm in dict_fantoir:
 		fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dict_fantoir[rel_name_norm]+"\"/>\n")
 		nb_voies_fantoir += 1
 	else:
-		print('Pas de rapprochement FANTOIR pour : '+rel_name)
+		ftmpkeys.write('Pas FANTOIR : '+rel_name+'\n')
 	fout.write("	</relation>\n")
 	nb_voies_total +=1
 	fout.write("</osm>")
 	fout.close()
+
+ftmpkeys.close()
 
 # numeros non places / ambigus
 fout = open(dirout+'/numeros_ambigus_a_verifier.osm','w')
