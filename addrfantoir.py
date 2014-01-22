@@ -57,9 +57,9 @@ for w in xmlways.iter('way'):
 
 fntmpkeys = 'cles_noms_de_voies.txt'
 ftmpkeys = open(fntmpkeys,'w')
-ftmpkeys.write('--noms de voies OSM--\n')
+ftmpkeys.write('--noms de voies OSM normalisés (noms en base OSM)--\n')
 for v in sorted(dict_ways_osm):
-	ftmpkeys.write(v.encode('utf8')+'\n')
+	ftmpkeys.write(v.encode('utf8')+' ('+dict_ways_osm[v]['name'].encode('utf8')+')\n')
 ftmpkeys.write('---------------------\n')
 
 print('mise en cache des adresses...')
@@ -93,7 +93,7 @@ for r in dict_rels:
 	rel_name = dict_rels[r]['name'];
 	rel_name_norm = f.normalize(rel_name)
 	
-	fout = open(dirout+'/'+rel_name_norm+'.osm','w')
+	fout = open(dirout+'/'+rel_name_norm.replace(' ','_')+'.osm','w')
 	fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addrfantoir.py\">\n")
 
@@ -117,7 +117,7 @@ for r in dict_rels:
 			fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
 		nb_voies_osm += 1
 	else:
-		ftmpkeys.write('Pas OSM     : '+rel_name+'\n')
+		ftmpkeys.write('Pas OSM     : '+rel_name_norm+' ('+rel_name+')\n')
 	fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
 	fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
 	if rel_name_norm in dict_fantoir:

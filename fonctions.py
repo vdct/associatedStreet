@@ -74,14 +74,59 @@ def normalize(s):
 			s = dict_abbrev_debut[s_comp]+' '+s_reste
 			abrev_trouvee = True
 	
+	# ordinal
+	s = s.replace(' EME ','EME ')
+	
 	# chiffres
 	s = s.replace('0','ZERO').replace('1','UN').replace('2','DEUX').replace('3','TROIS').replace('4','QUATRE').replace('5','CINQ').replace('6','SIX').replace('7','SEPT').replace('8','HUIT').replace('9','NEUF')
+	s = s.replace(' DIX ',' UNZERO ').replace(' ONZE ',' UNUN ').replace(' DOUZE ',' UNDEUX ')
 	
 	# articles
-	list_replace_blanc = ['DE LA','DU','DES','LE','LA','LES']
+	list_replace_blanc = ['DE LA','DU','DES','LE','LA','LES','DE','D']
 	for r in list_replace_blanc:
 		s = s.replace(' '+r+' ',' ')
 	
+	# titres, etc.
+	list_replace_titre = [	['MARECHAL','MAL'],
+							['PRESIDENT','PDT'],
+							['GENERAL','GAL'],
+							['COMMANDANT','CDT'],
+							['CAPITAINE','CAP'],
+							['REGIMENT','REGT'],
+							['SAINTE','STE'],
+							['SAINT','ST']]
+	for r in list_replace_titre:
+		s = s.replace(' '+r[0]+' ',' '+r[1]+' ')
+	
+	# chiffres romains
+	sp = s.split()
+	dict_replace_romains = {'XXIII':'DEUXTROIS',
+							'XXII' :'DEUXDEUX',
+							'XXI'  :'DEUXUN',
+							'XX'   :'DEUXZERO',
+							'XIX'  :'UNNEUF',
+							'XVIII':'UNHUIT',
+							'XVII' :'UNSEPT',
+							'XVI'  :'UNSIX',
+							'XV'   :'UNCINQ',
+							'XIV'  :'UNQUATRE',
+							'XIII' :'UNTROIS',
+							'XII'  :'UNDEUX',
+							'XI'   :'UNUN',
+							'X'    :'UNZERO',
+							'IX'   :'NEUF',
+							'VIII' :'HUIT',
+							'VII'  :'SEPT',
+							'VI'   :'SIX',
+							'V'    :'CINQ',
+							'IV'   :'QUATRE',
+							'III'  :'TROIS',
+							'II'   :'DEUX',
+							'I'    :'UN'}
+	if sp[-1] in dict_replace_romains:
+		sp[-1] = dict_replace_romains[sp[-1]]
+		s = ' '.join(sp)
+		
 	return s
 	
 def get_dict_replace_lettres():
