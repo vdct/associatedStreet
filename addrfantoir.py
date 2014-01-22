@@ -102,7 +102,7 @@ for r in dict_rels:
 		n = dict_nodes[a]
 		fout.write("	<node lat=\""+n['prop']['lat']+"\" lon=\""+n['prop']['lon']+"\" id=\""+a+"\">\n")
 		for k,v in n['tag'].iteritems():
-			fout.write('		<tag k="'+k+' v="'+v+'"/>\n')
+			fout.write('		<tag k="'+k+'" v="'+v+'"/>\n')
 		fout.write("	</node>\n")
 		min_id = min(min_id,int(a))
 		
