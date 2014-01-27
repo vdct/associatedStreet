@@ -124,7 +124,7 @@ for r in dict_rels:
 		fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dict_fantoir[rel_name_norm]+"\"/>\n")
 		nb_voies_fantoir += 1
 	else:
-		ftmpkeys.write('Pas FANTOIR : '+rel_name+'\n')
+		ftmpkeys.write('Pas FANTOIR : '+rel_name.encode('utf8')+'\n')
 	fout.write("	</relation>\n")
 	nb_voies_total +=1
 	fout.write("</osm>")
