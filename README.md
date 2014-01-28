@@ -1,3 +1,9 @@
+addr_fantoir_building.py
+Reprend les fonctionnalités de addrfantoir.py et ajoute le rattachement des n° d'adresse aux bâtiments sous forme de tag porté par le way building.
+Requiert le script adresses_buildings.sql et un accès en RW à une base PostGIS.
+Le fichier pg_connexion.py est à adapter en modifiant les parties entre <>.
+
+***************
 addrfantoir.py : recherche du code FANTOIR des voies pour enrichissement d'un fichier d'adresses déjà regroupées en relations associatedStreet.
 Le fichier des relations provient de http://37.187.60.59/cadastre-housenumber/adresses.php
 En local, il faut dans le répertoire où se situe ce fichier ET le script python, ajouter :

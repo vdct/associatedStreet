@@ -26,6 +26,11 @@ class Dicts:
 						'U':[u'Û',u'Ü']}
 	def load_fantoir(self,insee):
 		fndep = insee[0:2]+'0.txt'
+		if not os.path.exists(fndep):
+			print('Fichier FANTOIR "'+fndep+'" absent du répertoire')
+			print('Telechargeable ici : http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits')
+			print('Abandon')
+			os._exit(0)		
 		h = open(fndep,'r')
 		dictFantoir = {}
 		insee_com = insee[2:5]
@@ -204,7 +209,7 @@ class Node:
 	def get_as_osm_xml_node(self,is_closed,is_modified):
 		s_modified = ""
 		if is_modified:
-			s_modified = " \"action\"=\"modified\" "
+			s_modified = " action=\"modify\" "
 		s = "\t<node id=\""+str(self.id)+"\" "+s_modified+"lat=\""+str(self.lat)+"\" lon=\""+str(self.lon)+"\" version=\""+str(self.version)+"\""
 		if len(self.tags) == 0 and is_closed:
 			s = s+"/>\n"
@@ -247,9 +252,11 @@ class PolyGeom:
 		res = res+','.join(a_n)+')\''
 		return res	
 class Building:
-	def __init__(self,geom,tags):
+	def __init__(self,geom,tags,version):
 		self.geom = geom
 		self.tags = tags
+		self.version = version
+		self.modified = False
 		if len(self.geom.a_nodes) > 2 and self.geom.a_nodes[0] == self.geom.a_nodes[-1]:
 			self.is_valid_geom = True
 		else:
@@ -291,27 +298,29 @@ class Adresses:
 			self.a[cle] = {}
 		self.a[cle][ad.numero] = ad
 
-def get_as_osm_xml_way(node_list,tags,id,is_closed,is_modified):
+def get_as_osm_xml_way(node_list,tags,id,version,is_modified):
 	s_modified = ""
 	if is_modified:
-		s_modified = " \"action\"=\"modified\" "
-		s = "\t<way id=\""+str(id)+"\" "+s_modified+"\" version=\""+str(self.version)+"\">\n"
+		s_modified = " action=\"modify\" "
+		s = "\t<way id=\""+str(id)+"\"" +s_modified+" version=\""+str(version)+"\">\n"
 		for nl in node_list:
 			s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
 		for k in sorted(tags.viewkeys()):
-			s = s+"\t\t<tag k=\""+k+"\" v=\""+self.tags[k].encode('utf8')+"\"/>\n"
-		if is_closed:
-			s = s+"</way>\n"
+			s = s+"\t\t<tag k=\""+k+"\" v=\""+tags[k].encode('utf8')+"\"/>\n"
+		s = s+"\t</way>\n"
 	return s
 code_insee = raw_input('Code INSEE : ')
-
+code_cadastre = raw_input('Code Cadastre : ')
 dicts = Dicts()
 dicts.load_all(code_insee)
-pgc = get_pgc('adresses')
+pgc = get_pgc()
 
-fnparcelles = raw_input('fichier parcelles : ')
-fnadresses = raw_input('fichier adresses : ')
-dirout = 'fichiers_'+fnadresses.replace('.osm','')
+nom_ville = raw_input('Nom de la ville : ')
+nom_ville = normalize(nom_ville).replace(' ','_')
+
+fnparcelles = code_cadastre+'-parcelles.osm'
+fnadresses = code_cadastre+'-adresses.osm'
+dirout = 'fichiers_'+fnadresses.replace('.osm','_')+nom_ville
 if not os.path.exists(dirout):
 	os.mkdir(dirout)
 	
@@ -355,7 +364,7 @@ for b in xmlbuldings.iter('way'):
 	dtags = {}
 	for tg in b.iter('tag'):
 		dtags[tg.get('k')] = tg.get('v')
-	buildings.add_building(Building(g,dtags),b.get('id'))
+	buildings.add_building(Building(g,dtags,b.get('version')),b.get('id'))
 
 print('chargement des polygones...')
 cur_buildings = pgc.cursor()
@@ -432,6 +441,7 @@ for p in xmlparcelles.iter('way'):
 		if len(addrs[sa]) == 2:
 			par = Parcelle(pg,addrs[sa]['housenumber'],normalize(addrs[sa]['street']))
 			parcelles.add_parcelle(par,p.get('id'))
+			dicts.add_voie('parcelle',addrs[sa]['street'])
 
 print('chargement...')
 cur_parcelles = pgc.cursor()
@@ -548,23 +558,21 @@ str_query = '''SELECT id_building::integer,
 						id_adresse::integer,
 						numero,
 						voie
-				FROM lien_node_adresse_buildings;'''
+				FROM adresse_sur_buildings;'''
 cur_addr_building.execute(str_query)
 
 print('Report des adresses sur les buildings...')
 for c in cur_addr_building:
 	adresses.a[c[3]][c[2]].add_building(str(c[0]))
-	
-	# for n in adresses.a[v]:
-		# for b in adresses.a[v][n].buildings_id:
-			# print(n+' '+v+' : '+str(b))
+	buildings.b[str(c[0])].tags['addr:housenumber'] = c[2]
+	buildings.b[str(c[0])].modified = True
 
 nb_voies_total = 0
 nb_voies_fantoir = 0
 nb_voies_osm = 0
 
-print('Fichier "cles_noms_de_voies.txt" pour controle...')
-fntmpkeys = 'cles_noms_de_voies.txt'
+print('Fichier rapport...')
+fntmpkeys = dirout+'/_rapport.txt'
 ftmpkeys = open(fntmpkeys,'w')
 ftmpkeys.write('--noms de voies OSM normalisés (noms en base OSM)--\n')
 for v in sorted(dict_ways_osm):
@@ -577,7 +585,7 @@ nb_voies_osm = 0
 
 print('Fichiers associatedStreet...')
 for v in adresses.a:
-	fout = open(dirout+'/'+dicts.noms_voies[v]['cadastre'].replace(' ','_')+'.osm','w')
+	fout = open(dirout+'/'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
 	fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
 # nodes
@@ -596,17 +604,17 @@ for v in adresses.a:
 		numadresse = adresses.a[v][num]
 		if len(numadresse.buildings_id) > 0:
 			for eb in numadresse.buildings_id:
-				fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,eb,True,False))
+				fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,eb,buildings.b[eb].version,buildings.b[eb].modified))
 
 # relations	
 	fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
 	for num in adresses.a[v]:
 		numadresse = adresses.a[v][num]
 		if len(numadresse.buildings_id) == 0:
-			fout.write("		<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
+			fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
 		else:
 			for eb in numadresse.buildings_id:
-				fout.write("		<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
+				fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
 				
 	street_name = dicts.noms_voies[v]['cadastre'].title()
 	if 'OSM' in dicts.noms_voies[v]:
@@ -628,11 +636,17 @@ for v in adresses.a:
 	fout.write("</osm>")
 	fout.close()
 
+ftmpkeys.write(	"---------------- BILAN ----------------\n")
+s = 			"Nombre de relations creees  : "+str(nb_voies_total)
+print(s)
+ftmpkeys.write(s+'\n')
+s = "     avec code FANTOIR      : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)"
+print(s)
+ftmpkeys.write(s+'\n')
+s = "     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm*100/nb_voies_total))+"%)"
+print(s)
+ftmpkeys.write(s+'\n')
 ftmpkeys.close()
-
-print("Nombre de relations creees  : "+str(nb_voies_total))
-print("     avec code FANTOIR      : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)")
-print("     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm*100/nb_voies_total))+"%)")
 
 # mode 1 : addr:housenumber comme tag du building
 #			sinon point adresse seul à la place fournie en entree
