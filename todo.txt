@@ -1,0 +1,8 @@
+- inclure dans les fichiers tous les buildings des parcelles de la voie, pas seulement ceux modifiés
+- détecter la présence de n° de rue voire d'une relation associatedStreet
+- inclure la géométrie des rôles street ?
+- ajouter le user pour les objets déjà en base
+- charger en base le tag wall pour discriminer
+- tiercé 1
+  - éliminer les segments utilisés +1 fois
+  - éliminer les segments wall=no
