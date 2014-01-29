@@ -578,10 +578,6 @@ cur_addr_building_comp.execute(str_query)
 for c in cur_addr_building_comp:
 	adresses.add_batiment_complementaire(c[1],c[0])
 
-nb_voies_total = 0
-nb_voies_fantoir = 0
-nb_voies_osm = 0
-
 print('Fichier rapport...')
 fntmpkeys = dirout+'/_rapport.txt'
 ftmpkeys = open(fntmpkeys,'w')
@@ -590,9 +586,13 @@ for v in sorted(dict_ways_osm):
 	ftmpkeys.write(v.encode('utf8')+' ('+dict_ways_osm[v]['name'].encode('utf8')+')\n')
 ftmpkeys.write('---------------------\n')
 
+# compteurs pour le bilan
 nb_voies_total = 0
 nb_voies_fantoir = 0
 nb_voies_osm = 0
+
+# dictionnaire pour dedoublonner les nodes a l'ecriture
+dict_nodes = {}
 
 print('Fichiers associatedStreet...')
 for v in adresses.a:
@@ -603,9 +603,11 @@ for v in adresses.a:
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
 		if len(numadresse.buildings_id) == 0:
-			fout.write(numadresse.node.get_as_osm_xml_node(False,True))
-			fout.write('		<tag k="addr:housenumber" v="'+num+'"/>\n')
-			fout.write("	</node>\n")
+			if not numadresse.node.id in dict_nodes:
+				fout.write(numadresse.node.get_as_osm_xml_node(False,True))
+				fout.write('		<tag k="addr:housenumber" v="'+num+'"/>\n')
+				fout.write("	</node>\n")
+				dict_nodes[numadresse.node.id] = 1
 		else:
 			for eb in numadresse.buildings_id:
 				for ebn in buildings.b[eb].geom.a_nodes:
