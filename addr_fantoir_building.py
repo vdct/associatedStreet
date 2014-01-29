@@ -131,8 +131,7 @@ class Dicts:
 		cle = normalize(nom)
 		if not cle in self.noms_voies:
 			self.noms_voies[cle] = {}
-		self.noms_voies[cle][origine] = nom
-		
+		self.noms_voies[cle][origine] = nom	
 def get_part_debut(s,nb_parts):
 	resp = ''
 	if get_nb_parts(s) > nb_parts:
@@ -188,7 +187,6 @@ def normalize(s):
 		s = ' '.join(sp)
 			
 	return s
-
 def get_line_in_st_line_format(nodelist):
 	s = 'ST_LineFromText(\'LINESTRING('
 	l_coords = []
@@ -220,7 +218,6 @@ class Node:
 			if is_closed:
 				s = s+"</node>\n"
 		return s
-
 class Nodes:
 	def __init__(self):
 		self.n = {}
@@ -295,9 +292,11 @@ class Adresses:
 	def add_adresse(self,ad):
 		cle = normalize(ad.voie)
 		if not cle in self.a:
-			self.a[cle] = {}
-		self.a[cle][ad.numero] = ad
-
+			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
+		self.a[cle]['numeros'][ad.numero] = ad
+	def add_batiment_complementaire(self,cle,b_id):
+		self.a[cle]['batiments_complementaires'] = self.a[cle]['batiments_complementaires'] + [b_id]
+		
 def get_as_osm_xml_way(node_list,tags,id,version,is_modified):
 	s_modified = ""
 	if is_modified:
@@ -499,8 +498,8 @@ cur_adresses.execute(str_query)
 
 str_query = ""
 for idx,voie in enumerate(adresses.a):
-	for num in adresses.a[voie]:
-		ad = adresses.a[voie][num]
+	for num in adresses.a[voie]['numeros']:
+		ad = adresses.a[voie]['numeros'][num]
 		str_query = str_query+'''INSERT INTO tmp_adresses 
 						(SELECT ST_Transform('''+ad.node.get_geom_as_text()+''',
 						2154),'''+str(ad.node.id)+''',\''''+num+'''\',\''''+voie+'''\');'''
@@ -553,6 +552,8 @@ fsql.close()
 cur_sql = pgc.cursor()
 cur_sql.execute(str_query+'COMMIT;')
 
+print('Report des adresses sur les buildings...')
+# batiments modifies
 cur_addr_building = pgc.cursor()
 str_query = '''SELECT id_building::integer,
 						id_adresse::integer,
@@ -561,11 +562,21 @@ str_query = '''SELECT id_building::integer,
 				FROM adresse_sur_buildings;'''
 cur_addr_building.execute(str_query)
 
-print('Report des adresses sur les buildings...')
 for c in cur_addr_building:
-	adresses.a[c[3]][c[2]].add_building(str(c[0]))
+	adresses.a[c[3]]['numeros'][c[2]].add_building(str(c[0]))
 	buildings.b[str(c[0])].tags['addr:housenumber'] = c[2]
 	buildings.b[str(c[0])].modified = True
+
+print('Ajout des autres buildings de la voie...')
+# autres batiments des parcelles de la voie
+cur_addr_building_comp = pgc.cursor()
+str_query = '''SELECT id_building::integer,
+						voie
+				FROM buildings_complementaires;'''
+cur_addr_building_comp.execute(str_query)
+
+for c in cur_addr_building_comp:
+	adresses.add_batiment_complementaire(c[1],c[0])
 
 nb_voies_total = 0
 nb_voies_fantoir = 0
@@ -589,8 +600,8 @@ for v in adresses.a:
 	fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
 # nodes
-	for num in adresses.a[v]:
-		numadresse = adresses.a[v][num]
+	for num in adresses.a[v]['numeros']:
+		numadresse = adresses.a[v]['numeros'][num]
 		if len(numadresse.buildings_id) == 0:
 			fout.write(numadresse.node.get_as_osm_xml_node(False,True))
 			fout.write('		<tag k="addr:housenumber" v="'+num+'"/>\n')
@@ -600,16 +611,16 @@ for v in adresses.a:
 				for ebn in buildings.b[eb].geom.a_nodes:
 					fout.write(nodes.n[ebn].get_as_osm_xml_node(True,False))
 # ways
-	for num in adresses.a[v]:
-		numadresse = adresses.a[v][num]
+	for num in adresses.a[v]['numeros']:
+		numadresse = adresses.a[v]['numeros'][num]
 		if len(numadresse.buildings_id) > 0:
 			for eb in numadresse.buildings_id:
 				fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,eb,buildings.b[eb].version,buildings.b[eb].modified))
 
 # relations	
 	fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
-	for num in adresses.a[v]:
-		numadresse = adresses.a[v][num]
+	for num in adresses.a[v]['numeros']:
+		numadresse = adresses.a[v]['numeros'][num]
 		if len(numadresse.buildings_id) == 0:
 			fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
 		else:

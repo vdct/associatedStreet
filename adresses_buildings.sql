@@ -54,10 +54,13 @@ JOIN	tmp_adresses a
 ON	a.voie = b.voie AND
 	a.numero = b.numero;
 
-/*DROP TABLE IF EXISTS buildings_complementaires CASCADE;
+DROP TABLE IF EXISTS buildings_complementaires CASCADE;
 CREATE TABLE buildings_complementaires
 AS
-SELECT b.id_building,
-	b.voie
-FROM	bulding_parcelle b
-EXCEPT	tmp_adresses a*/
+SELECT id_building,
+		voie
+FROM	bulding_parcelle
+EXCEPT
+SELECT id_building,
+		voie
+FROM	adresse_sur_buildings;
