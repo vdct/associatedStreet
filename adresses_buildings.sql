@@ -18,35 +18,64 @@ FROM	tmp_parcelles_union;
 DROP TABLE IF EXISTS bulding_parcelle CASCADE;
 CREATE TABLE bulding_parcelle
 AS
-SELECT b.geometrie geometrie_building,
-	b.id id_building,
-	p.geometrie geometrie_parcelle,
-	p.numero,
-	p.voie
+SELECT b.*,
+		p.numero,
+		p.voie
 FROM tmp_parcelles_union_buffer p
 JOIN tmp_building b
 ON ST_Contains(p.geometrie,b.geometrie);
 
+-- Election des batiments
+--1 batiments en dur de + de 15m2 au sol
+DROP TABLE IF EXISTS batiments_possibles CASCADE;
+CREATE TABLE batiments_possibles
+AS
+SELECT 	b.*,1 etape
+FROM	bulding_parcelle b
+WHERE	ST_Area(b.geometrie) > 15 AND
+		b.wall != 'no';
+--2 batiments legers de + de 15m2 au sol
+INSERT INTO batiments_possibles
+SELECT 	b.*,2 etape
+FROM	bulding_parcelle b
+LEFT OUTER JOIN batiments_possibles bj
+ON		b.numero = bj.numero 		AND
+		b.voie = bj.voie
+WHERE	ST_Area(b.geometrie) > 15 	AND
+		b.wall = 'no' 				AND
+		bj.numero IS NULL;
+--3 le + grand batiment pour les parcelles restantes
+INSERT INTO batiments_possibles
+SELECT 	b.*,3 etape
+FROM	bulding_parcelle b
+JOIN 	(SELECT id_building,rank() OVER (PARTITION BY numero,voie ORDER BY ST_Area(geometrie) desc) rang
+		FROM bulding_parcelle)r
+ON	b.id_building = r.id_building
+LEFT OUTER JOIN bulding_parcelle bj
+ON		b.numero = bj.numero 	AND
+		b.voie = bj.voie
+WHERE	r.rang = 1 				AND
+		bj.numero IS NULL;
+		
 DROP TABLE IF EXISTS bulding_mono_parcelle CASCADE;
 CREATE TABLE bulding_mono_parcelle
 AS
-SELECT bp.geometrie_building,
+SELECT bp.geometrie,
 	bp.id_building,
 	bp.numero,
 	bp.voie
-FROM
-(SELECT id_building
-FROM	bulding_parcelle
-GROUP BY 1
-HAVING COUNT(*) = 1) bm
-JOIN bulding_parcelle bp
+FROM	(SELECT id_building
+		FROM	batiments_possibles
+		GROUP BY 1
+		HAVING COUNT(*) = 1) bm
+JOIN batiments_possibles bp
 ON bm.id_building = bp.id_building;
 
 DROP TABLE IF EXISTS adresse_sur_buildings CASCADE;
 CREATE TABLE adresse_sur_buildings
 AS
 SELECT b.id_building,
-	a.id id_adresse,
+	a.id_adresse,
 	b.numero,
 	b.voie
 FROM	bulding_mono_parcelle b

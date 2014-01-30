@@ -201,22 +201,23 @@ class Node:
 		self.id = id
 		self.version = version
 		self.tags = tags
+		self.sent = False
+		self.modified = False
 	def get_geom_as_text(self):
 		strp = 'ST_PointFromText(\'POINT('+str(self.lon)+' '+str(self.lat)+')\',4326)'
 		return strp
-	def get_as_osm_xml_node(self,is_closed,is_modified):
+	def get_as_osm_xml_node(self):
 		s_modified = ""
-		if is_modified:
+		if self.modified:
 			s_modified = " action=\"modify\" "
-		s = "\t<node id=\""+str(self.id)+"\" "+s_modified+"lat=\""+str(self.lat)+"\" lon=\""+str(self.lon)+"\" version=\""+str(self.version)+"\""
-		if len(self.tags) == 0 and is_closed:
+		s = "\t<node id=\""+str(self.id)+"\" "+s_modified+"lat=\""+str(self.lat)+"\" lon=\""+str(self.lon)+"\" visible=\"true\" version=\""+str(self.version)+"\""
+		if len(self.tags) == 0:
 			s = s+"/>\n"
 		else:
 			s = s+">\n"
 			for k in sorted(self.tags.viewkeys()):
 				s = s+"\t\t<tag k=\""+k+"\" v=\""+self.tags[k].encode('utf8')+"\"/>\n"
-			if is_closed:
-				s = s+"</node>\n"
+			s = s+"\t</node>\n"
 		return s
 class Nodes:
 	def __init__(self):
@@ -226,21 +227,20 @@ class Nodes:
 		id = xml_node.get('id')
 		self.n[id]= Node(xml_node.get('lon'),xml_node.get('lat'),id,xml_node.get('version'),tags)
 		self.min_id = min(self.min_id,int(id))
-	def load_new_node_from_xml(self,xml_node):
-		n = self.add_new_node(xml_node.get('lon'),xml_node.get('lat'))
-		return nodes.n[n]
-	def add_new_node(self,lon,lat):
+	def load_new_node_from_xml(self,xml_node,tags):
+		n = self.add_new_node(xml_node.get('lon'),xml_node.get('lat'),tags)
+		return n
+	def add_new_node(self,lon,lat,tags):
 		id = str(self.min_id - 1)
-		self.n[id] = Node(lon,lat,id,'0',{})
+		self.n[id] = Node(lon,lat,id,'0',tags)
+		self.n[id].modified = True
 		self.min_id = min(self.min_id,int(id))
 		return id
 class PolyGeom:
 	def __init__(self):
 		self.a_nodes = []
-	
 	def add_geom(self,a_nodes):
 		self.a_nodes = a_nodes
-		
 	def get_geom_as_linestring_text(self):
 		res = '\'LINESTRING('
 		a_n = []
@@ -249,11 +249,16 @@ class PolyGeom:
 		res = res+','.join(a_n)+')\''
 		return res	
 class Building:
-	def __init__(self,geom,tags,version):
+	def __init__(self,geom,tags,attrib):
 		self.geom = geom
 		self.tags = tags
-		self.version = version
+		self.attrib = attrib
 		self.modified = False
+		self.sent = False
+		if 'wall' not in tags:
+			self.wall = 'yes'
+		else:
+			self.wall = tags['wall']
 		if len(self.geom.a_nodes) > 2 and self.geom.a_nodes[0] == self.geom.a_nodes[-1]:
 			self.is_valid_geom = True
 		else:
@@ -295,18 +300,28 @@ class Adresses:
 			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
 		self.a[cle]['numeros'][ad.numero] = ad
 	def add_batiment_complementaire(self,cle,b_id):
+		if not cle in self.a:
+			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
 		self.a[cle]['batiments_complementaires'] = self.a[cle]['batiments_complementaires'] + [b_id]
 		
-def get_as_osm_xml_way(node_list,tags,id,version,is_modified):
+def get_as_osm_xml_way(node_list,tags,attrib,modified):
 	s_modified = ""
-	if is_modified:
-		s_modified = " action=\"modify\" "
-		s = "\t<way id=\""+str(id)+"\"" +s_modified+" version=\""+str(version)+"\">\n"
-		for nl in node_list:
-			s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
-		for k in sorted(tags.viewkeys()):
-			s = s+"\t\t<tag k=\""+k+"\" v=\""+tags[k].encode('utf8')+"\"/>\n"
-		s = s+"\t</way>\n"
+	if modified:
+		s_modified = "action=\"modify\" "
+	s = "\t<way id=\""+attrib['id']+"\" "+s_modified
+#	del attrib['id']
+#	if 'modify' in attrib:
+#		del attrib['modify']
+	for a in attrib:
+		if a == 'id' or a == 'modify':
+			continue
+		s = s+" "+a.encode('utf8')+"=\""+attrib[a].encode('utf8')+"\""
+	s = s+">\n"
+	for nl in node_list:
+		s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
+	for k in sorted(tags.viewkeys()):
+		s = s+"\t\t<tag k=\""+k+"\" v=\""+tags[k].encode('utf8')+"\"/>\n"
+	s = s+"\t</way>\n"
 	return s
 code_insee = raw_input('Code INSEE : ')
 code_cadastre = raw_input('Code Cadastre : ')
@@ -363,14 +378,15 @@ for b in xmlbuldings.iter('way'):
 	dtags = {}
 	for tg in b.iter('tag'):
 		dtags[tg.get('k')] = tg.get('v')
-	buildings.add_building(Building(g,dtags,b.get('version')),b.get('id'))
+	buildings.add_building(Building(g,dtags,b.attrib),b.get('id'))
 
 print('chargement des polygones...')
 cur_buildings = pgc.cursor()
 str_query = '''DROP TABLE IF EXISTS tmp_building CASCADE;
 				CREATE TABLE tmp_building
 				(geometrie geometry,
-				id double precision);
+				id_building double precision,
+				wall character varying (250));
 				COMMIT;'''
 cur_buildings.execute(str_query)
 
@@ -380,7 +396,7 @@ for idx,id in enumerate(buildings.b):
 		continue
 	str_query = str_query+'''INSERT INTO tmp_building 
 						(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(buildings.b[id].geom.get_geom_as_linestring_text())+''')),4326),2154),
-						'''+id+''');'''
+						'''+id+''',\''''+buildings.b[id].wall+'''\');'''
 	if idx%100 == 0 and str_query != "":
 		cur_buildings.execute(str_query+"COMMIT;")
 		str_query = ""
@@ -447,7 +463,7 @@ cur_parcelles = pgc.cursor()
 str_query = '''DROP TABLE IF EXISTS tmp_parcelles CASCADE;
 				CREATE TABLE tmp_parcelles
 				(geometrie geometry,
-				id double precision,
+				id_parcelle double precision,
 				numero character varying(50),
 				voie character varying (250));
 				COMMIT;'''
@@ -479,18 +495,21 @@ for asso in xmladresses.iter('relation'):
 		dicts.add_voie('cadastre',t.get('v'))
 
 for n in xmladresses.iter('node'):
-	node_ad = nodes.load_new_node_from_xml(n)
+	tags = {}
 	for t in n.iter('tag'):
-		if t.get('k') == 'addr:housenumber' and n.get('id') in dict_node_relations:
-			ad = Adresse(node_ad,t.get('v'),dict_node_relations[n.get('id')])
-			adresses.add_adresse(ad)
+		tags[t.get('k')] = t.get('v')
+	node_id = nodes.load_new_node_from_xml(n,tags)
+	nodes.n[node_id].modified = True
+	if 'addr:housenumber' in tags and n.get('id') in dict_node_relations:
+		ad = Adresse(nodes.n[node_id],tags['addr:housenumber'],dict_node_relations[n.get('id')])
+		adresses.add_adresse(ad)
 			
 print('chargement...')
 cur_adresses = pgc.cursor()
 str_query = '''DROP TABLE IF EXISTS tmp_adresses CASCADE;
 				CREATE TABLE tmp_adresses
 				(geometrie geometry,
-				id double precision,
+				id_adresse double precision,
 				numero character varying(50),
 				voie character varying (250));
 				COMMIT;'''
@@ -576,7 +595,7 @@ str_query = '''SELECT id_building::integer,
 cur_addr_building_comp.execute(str_query)
 
 for c in cur_addr_building_comp:
-	adresses.add_batiment_complementaire(c[1],c[0])
+	adresses.add_batiment_complementaire(c[1],str(c[0]))
 
 print('Fichier rapport...')
 fntmpkeys = dirout+'/_rapport.txt'
@@ -592,32 +611,51 @@ nb_voies_fantoir = 0
 nb_voies_osm = 0
 
 # dictionnaire pour dedoublonner les nodes a l'ecriture
-dict_nodes = {}
 
 print('Fichiers associatedStreet...')
-for v in adresses.a:
+for v in adresses.a:	
 	fout = open(dirout+'/'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
 	fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
 # nodes
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
+## 	point adresses seuls
 		if len(numadresse.buildings_id) == 0:
-			if not numadresse.node.id in dict_nodes:
-				fout.write(numadresse.node.get_as_osm_xml_node(False,True))
-				fout.write('		<tag k="addr:housenumber" v="'+num+'"/>\n')
-				fout.write("	</node>\n")
-				dict_nodes[numadresse.node.id] = 1
+			if not numadresse.node.sent:
+				fout.write(numadresse.node.get_as_osm_xml_node())
+				numadresse.node.sent = True
+## 	nodes references par un batiment
 		else:
 			for eb in numadresse.buildings_id:
 				for ebn in buildings.b[eb].geom.a_nodes:
-					fout.write(nodes.n[ebn].get_as_osm_xml_node(True,False))
+					if not nodes.n[ebn].sent:
+						fout.write(nodes.n[ebn].get_as_osm_xml_node())
+						nodes.n[ebn].sent = True
+##	nodes des batiments complementaires
+	for eb in adresses.a[v]['batiments_complementaires']:
+		for ebn in buildings.b[eb].geom.a_nodes:
+			if not nodes.n[ebn].sent:
+				fout.write(nodes.n[ebn].get_as_osm_xml_node())
+				nodes.n[ebn].sent = True
+	
 # ways
+## batiments porteurs d'une adresse
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
 		if len(numadresse.buildings_id) > 0:
 			for eb in numadresse.buildings_id:
-				fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,eb,buildings.b[eb].version,buildings.b[eb].modified))
+				fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,buildings.b[eb].attrib,buildings.b[eb].modified))
+# en prevision des autres fichiers, raz du statut "envoye" des nodes
+				for ebn in buildings.b[eb].geom.a_nodes:
+					nodes.n[ebn].sent = False
+
+##	batiments complementaires
+	for eb in adresses.a[v]['batiments_complementaires']:
+		fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,buildings.b[eb].attrib,buildings.b[eb].modified))
+# en prevision des autres fichiers, raz du statut "envoye" des nodes
+		for ebn in buildings.b[eb].geom.a_nodes:
+			nodes.n[ebn].sent = False
 
 # relations	
 	fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
