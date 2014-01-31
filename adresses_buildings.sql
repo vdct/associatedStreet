@@ -93,3 +93,67 @@ EXCEPT
 SELECT id_building,
 		voie
 FROM	adresse_sur_buildings;
+
+DROP TABLE IF EXISTS buildings_hors_voies CASCADE;
+CREATE TABLE buildings_hors_voies
+AS
+SELECT id_building
+FROM	tmp_building
+EXCEPT
+(SELECT id_building
+FROM	adresse_sur_buildings
+UNION
+SELECT id_building
+FROM	buildings_complementaires);
+
+-- rabbatement des points Adresse
+UPDATE tmp_building_segments
+SET eligible = 0
+WHERE id_building IN (SELECT id_building
+						FROM	buildings_complementaires);
+UPDATE tmp_building_segments
+SET eligible = 0
+WHERE id_building IN (SELECT id_building
+						FROM	buildings_hors_voies) AND
+		eligible = 1;
+						
+UPDATE tmp_building_segments
+SET eligible = 0
+WHERE id_node1||'-'||id_node2 IN (SELECT id_node1||'-'||id_node2
+								FROM	tmp_building_segments
+								WHERE 	eligible = 0
+								UNION
+								SELECT id_node2||'-'||id_node1
+								FROM	tmp_building_segments
+								WHERE 	eligible = 0) AND
+		eligible = 1;
+
+DROP TABLE IF EXISTS centres_segments CASCADE;
+CREATE TABLE centres_segments
+AS
+SELECT ST_Centroid(geometrie) geometrie,
+	id_building,
+	id_node1,
+	id_node2,
+	indice_node_1
+FROM	tmp_building_segments
+WHERE	eligible = 1;
+
+DROP TABLE IF EXISTS points_adresse_sur_building CASCADE;
+CREATE TABLE points_adresse_sur_building
+AS
+SELECT *
+FROM
+	(SELECT c.*,
+			ST_X(ST_Transform(c.geometrie,4326)) lon,
+			ST_Y(ST_Transform(c.geometrie,4326)) lat,
+			ab.numero,
+			ab.voie,
+			RANK() OVER(PARTITION BY ab.numero,ab.voie ORDER BY ST_Distance(c.geometrie,a.geometrie)) rang
+	FROM	centres_segments c
+	JOIN	adresse_sur_buildings ab
+	ON		c.id_building = ab.id_building
+	JOIN	tmp_adresses a
+	ON		ab.numero = a.numero AND
+			ab.voie = a.voie)a
+WHERE a.rang = 1;

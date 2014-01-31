@@ -269,6 +269,15 @@ class Buildings:
 		self.b = {}
 	def add_building(self,b,id):
 		self.b[id] = b
+	def insert_new_point(self,b_id,n_id,offset):
+		if b_id not in self.b:
+			print('Batiment '+str(b_id)+' absent')
+			print('Node ('+str(nodes.n[n_id].lon)+','+str(nodes.n[n_id].lat)+') non rattache')
+		else:
+			b_geom = self.b[b_id].geom.a_nodes
+			b_geom.insert(offset+1,n_id)
+			self.b[b_id].geom.a_nodes = b_geom
+			self.b[b_id].modified = True
 class Parcelle:
 	def __init__(self,geom,numero,voie):
 		self.geom = geom
@@ -287,10 +296,15 @@ class Adresse:
 		self.node = node
 		self.numero = num
 		self.voie = voie
-		self.buildings_id = []
-
+		self.relation_as_building = []
+		self.relation_as_node = []
+		self.building_for_addr_node = []
 	def add_building(self,b_id):
-		self.buildings_id = self.buildings_id+[b_id]	
+		self.relation_as_building = self.relation_as_building+[b_id]
+	def add_addr_node(self, n_id):
+		self.relation_as_node = n_id
+	def add_building_for_addr_node(self,b_id):
+		self.building_for_addr_node = self.building_for_addr_node+[b_id]
 class Adresses:
 	def __init__(self):
 		self.a = {}
@@ -303,7 +317,6 @@ class Adresses:
 		if not cle in self.a:
 			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
 		self.a[cle]['batiments_complementaires'] = self.a[cle]['batiments_complementaires'] + [b_id]
-		
 def get_as_osm_xml_way(node_list,tags,attrib,modified):
 	s_modified = ""
 	if modified:
@@ -323,14 +336,19 @@ def get_as_osm_xml_way(node_list,tags,attrib,modified):
 		s = s+"\t\t<tag k=\""+k+"\" v=\""+tags[k].encode('utf8')+"\"/>\n"
 	s = s+"\t</way>\n"
 	return s
-code_insee = raw_input('Code INSEE : ')
-code_cadastre = raw_input('Code Cadastre : ')
+code_insee = raw_input('=> Code INSEE : ')
+code_cadastre = raw_input('=> Code Cadastre : ')
 dicts = Dicts()
 dicts.load_all(code_insee)
 pgc = get_pgc()
 
-nom_ville = raw_input('Nom de la ville : ')
+nom_ville = raw_input('=> Nom de la ville (facultatif) : ')
 nom_ville = normalize(nom_ville).replace(' ','_')
+print('### Style 1 : nouveau point addr:housenumber sur le batiment (defaut)')
+print('###       2 : ajout du tag addr:housenumber sur le polygone du batiment\n')
+tierce = raw_input('=> Style : ')
+if str(tierce) not in ['1','2']:
+	tierce = '1'
 
 fnparcelles = code_cadastre+'-parcelles.osm'
 fnadresses = code_cadastre+'-adresses.osm'
@@ -410,7 +428,8 @@ str_query = '''DROP TABLE IF EXISTS tmp_building_segments CASCADE;
 				id_building double precision,
 				id_node1 double precision,
 				id_node2 double precision,
-				indice_node_1 integer);
+				indice_node_1 integer,
+				eligible integer default 1);
 				COMMIT;'''
 cur_buildings.execute(str_query)
 
@@ -571,31 +590,49 @@ fsql.close()
 cur_sql = pgc.cursor()
 cur_sql.execute(str_query+'COMMIT;')
 
-print('Report des adresses sur les buildings...')
-# batiments modifies
-cur_addr_building = pgc.cursor()
-str_query = '''SELECT id_building::integer,
-						id_adresse::integer,
-						numero,
-						voie
-				FROM adresse_sur_buildings;'''
-cur_addr_building.execute(str_query)
+if tierce == '1':
+	print('Report des adresses sur les buildings en tant que nouveaux points...')
+	cur_addr_node_building = pgc.cursor()
+	str_query = '''SELECT 	lon,
+							lat,
+							id_building::integer,
+							indice_node_1,
+							numero,
+							voie
+					FROM points_adresse_sur_building;'''
+	cur_addr_node_building.execute(str_query)
+	for c in cur_addr_node_building:
+		new_node_id = nodes.add_new_node(c[0],c[1],{'addr:housenumber':c[4]})
+		buildings.insert_new_point(str(c[2]),new_node_id,c[3])
+		adresses.a[c[5]]['numeros'][c[4]].add_addr_node(new_node_id)
+		adresses.a[c[5]]['numeros'][c[4]].add_building_for_addr_node(str(c[2]))
+	
+if tierce == '2':
+	print('Report des adresses sur les buildings en tant que nouveau tag...')
+	# batiments modifies
+	cur_addr_way_building = pgc.cursor()
+	str_query = '''SELECT id_building::integer,
+							id_adresse::integer,
+							numero,
+							voie
+					FROM adresse_sur_buildings;'''
+	cur_addr_way_building.execute(str_query)
 
-for c in cur_addr_building:
-	adresses.a[c[3]]['numeros'][c[2]].add_building(str(c[0]))
-	buildings.b[str(c[0])].tags['addr:housenumber'] = c[2]
-	buildings.b[str(c[0])].modified = True
+	for c in cur_addr_way_building:
+		adresses.a[c[3]]['numeros'][c[2]].add_building(str(c[0]))
+		buildings.b[str(c[0])].tags['addr:housenumber'] = c[2]
+		buildings.b[str(c[0])].modified = True
 
-print('Ajout des autres buildings de la voie...')
-# autres batiments des parcelles de la voie
-cur_addr_building_comp = pgc.cursor()
-str_query = '''SELECT id_building::integer,
-						voie
-				FROM buildings_complementaires;'''
-cur_addr_building_comp.execute(str_query)
+	print('Ajout des autres buildings de la voie...')
+	# autres batiments des parcelles de la voie
+	cur_addr_building_comp = pgc.cursor()
+	str_query = '''SELECT id_building::integer,
+							voie
+					FROM buildings_complementaires;'''
+	cur_addr_building_comp.execute(str_query)
 
-for c in cur_addr_building_comp:
-	adresses.add_batiment_complementaire(c[1],str(c[0]))
+	for c in cur_addr_building_comp:
+		adresses.add_batiment_complementaire(c[1],str(c[0]))
 
 print('Fichier rapport...')
 fntmpkeys = dirout+'/_rapport.txt'
@@ -621,13 +658,13 @@ for v in adresses.a:
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
 ## 	point adresses seuls
-		if len(numadresse.buildings_id) == 0:
+		if len(numadresse.relation_as_building) == 0 and len(numadresse.relation_as_node) == 0:
 			if not numadresse.node.sent:
 				fout.write(numadresse.node.get_as_osm_xml_node())
 				numadresse.node.sent = True
 ## 	nodes references par un batiment
-		else:
-			for eb in numadresse.buildings_id:
+		if len(numadresse.relation_as_building) != 0:
+			for eb in numadresse.relation_as_building:
 				for ebn in buildings.b[eb].geom.a_nodes:
 					if not nodes.n[ebn].sent:
 						fout.write(nodes.n[ebn].get_as_osm_xml_node())
@@ -643,8 +680,8 @@ for v in adresses.a:
 ## batiments porteurs d'une adresse
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
-		if len(numadresse.buildings_id) > 0:
-			for eb in numadresse.buildings_id:
+		if len(numadresse.relation_as_building) > 0:
+			for eb in numadresse.relation_as_building:
 				fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,buildings.b[eb].attrib,buildings.b[eb].modified))
 # en prevision des autres fichiers, raz du statut "envoye" des nodes
 				for ebn in buildings.b[eb].geom.a_nodes:
@@ -661,10 +698,10 @@ for v in adresses.a:
 	fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
-		if len(numadresse.buildings_id) == 0:
+		if len(numadresse.relation_as_building) == 0:
 			fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
 		else:
-			for eb in numadresse.buildings_id:
+			for eb in numadresse.relation_as_building:
 				fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
 				
 	street_name = dicts.noms_voies[v]['cadastre'].title()
