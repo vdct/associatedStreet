@@ -278,6 +278,9 @@ class Buildings:
 			b_geom.insert(offset+1,n_id)
 			self.b[b_id].geom.a_nodes = b_geom
 			self.b[b_id].modified = True
+	def add_tag(self,b_id,k,v):
+		self.b[b_id].tags[k] = v
+		self.b[b_id].modified = True
 class Parcelle:
 	def __init__(self,geom,numero,voie):
 		self.geom = geom
@@ -296,13 +299,13 @@ class Adresse:
 		self.node = node
 		self.numero = num
 		self.voie = voie
-		self.relation_as_building = []
-		self.relation_as_node = []
+		self.addr_as_building_way = []
+		self.addr_as_node_on_building = []
 		self.building_for_addr_node = []
-	def add_building(self,b_id):
-		self.relation_as_building = self.relation_as_building+[b_id]
-	def add_addr_node(self, n_id):
-		self.relation_as_node = n_id
+	def add_addr_as_building(self,b_id):
+		self.addr_as_building_way = self.addr_as_building_way+[b_id]
+	def add_addr_as_node_on_building(self, n_id):
+		self.addr_as_node_on_building = [n_id]
 	def add_building_for_addr_node(self,b_id):
 		self.building_for_addr_node = self.building_for_addr_node+[b_id]
 class Adresses:
@@ -352,7 +355,7 @@ if str(tierce) not in ['1','2']:
 
 fnparcelles = code_cadastre+'-parcelles.osm'
 fnadresses = code_cadastre+'-adresses.osm'
-dirout = 'fichiers_'+fnadresses.replace('.osm','_')+nom_ville
+dirout = '_'.join(['adresses',nom_ville,code_insee[0:2],code_cadastre,'style',tierce])
 if not os.path.exists(dirout):
 	os.mkdir(dirout)
 	
@@ -554,7 +557,7 @@ if not os.path.exists(highway_rep):
 fnhighway = highway_rep+'/highways_'+code_insee+'.osm'
 if not os.path.exists(fnhighway):
 	highway_url = "http://overpass-api.de/api/interpreter?data=way%0A%20%20(area%3A"+str(3600000000+dicts.osm_insee[code_insee])+")%0A%20%20%5B%22highway%22%5D%5B%22name%22%5D%3B%0Aout%20body%3B"
-	print("téléchargement des ways OSM...")
+	print("telechargement des ways OSM...")
 	try:
 		resp = urllib2.urlopen(highway_url)
 		fhighway = open(fnhighway,'wb')
@@ -604,7 +607,7 @@ if tierce == '1':
 	for c in cur_addr_node_building:
 		new_node_id = nodes.add_new_node(c[0],c[1],{'addr:housenumber':c[4]})
 		buildings.insert_new_point(str(c[2]),new_node_id,c[3])
-		adresses.a[c[5]]['numeros'][c[4]].add_addr_node(new_node_id)
+		adresses.a[c[5]]['numeros'][c[4]].add_addr_as_node_on_building(new_node_id)
 		adresses.a[c[5]]['numeros'][c[4]].add_building_for_addr_node(str(c[2]))
 	
 if tierce == '2':
@@ -619,9 +622,8 @@ if tierce == '2':
 	cur_addr_way_building.execute(str_query)
 
 	for c in cur_addr_way_building:
-		adresses.a[c[3]]['numeros'][c[2]].add_building(str(c[0]))
-		buildings.b[str(c[0])].tags['addr:housenumber'] = c[2]
-		buildings.b[str(c[0])].modified = True
+		buildings.add_tag(str(c[0]),'addr:housenumber',c[2])
+		adresses.a[c[3]]['numeros'][c[2]].add_addr_as_building(str(c[0]))
 
 	print('Ajout des autres buildings de la voie...')
 	# autres batiments des parcelles de la voie
@@ -651,24 +653,30 @@ nb_voies_osm = 0
 
 print('Fichiers associatedStreet...')
 for v in adresses.a:	
-	fout = open(dirout+'/'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
+	fout = open(dirout+'/'+code_cadastre+'_'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
 	fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
 # nodes
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
-## 	point adresses seuls
-		if len(numadresse.relation_as_building) == 0 and len(numadresse.relation_as_node) == 0:
+## 	point adresse isole
+		if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
 			if not numadresse.node.sent:
 				fout.write(numadresse.node.get_as_osm_xml_node())
 				numadresse.node.sent = True
-## 	nodes references par un batiment
-		if len(numadresse.relation_as_building) != 0:
-			for eb in numadresse.relation_as_building:
-				for ebn in buildings.b[eb].geom.a_nodes:
-					if not nodes.n[ebn].sent:
-						fout.write(nodes.n[ebn].get_as_osm_xml_node())
-						nodes.n[ebn].sent = True
+## 	point adresse reference par un batiment
+		for eb in numadresse.building_for_addr_node:
+			for ebn in buildings.b[eb].geom.a_nodes:
+				if not nodes.n[ebn].sent:
+					fout.write(nodes.n[ebn].get_as_osm_xml_node())
+					nodes.n[ebn].sent = True
+##	nodes des batiments directement taggues en hsnr
+		for eb in numadresse.addr_as_building_way:
+			for ebn in buildings.b[eb].geom.a_nodes:
+				if not nodes.n[ebn].sent:
+					fout.write(nodes.n[ebn].get_as_osm_xml_node())
+					nodes.n[ebn].sent = True
+
 ##	nodes des batiments complementaires
 	for eb in adresses.a[v]['batiments_complementaires']:
 		for ebn in buildings.b[eb].geom.a_nodes:
@@ -680,12 +688,11 @@ for v in adresses.a:
 ## batiments porteurs d'une adresse
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
-		if len(numadresse.relation_as_building) > 0:
-			for eb in numadresse.relation_as_building:
-				fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,buildings.b[eb].attrib,buildings.b[eb].modified))
+		for eb in (numadresse.addr_as_building_way + numadresse.building_for_addr_node):
+			fout.write(get_as_osm_xml_way(buildings.b[eb].geom.a_nodes,buildings.b[eb].tags,buildings.b[eb].attrib,buildings.b[eb].modified))
 # en prevision des autres fichiers, raz du statut "envoye" des nodes
-				for ebn in buildings.b[eb].geom.a_nodes:
-					nodes.n[ebn].sent = False
+			for ebn in buildings.b[eb].geom.a_nodes:
+				nodes.n[ebn].sent = False
 
 ##	batiments complementaires
 	for eb in adresses.a[v]['batiments_complementaires']:
@@ -698,10 +705,12 @@ for v in adresses.a:
 	fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
 	for num in adresses.a[v]['numeros']:
 		numadresse = adresses.a[v]['numeros'][num]
-		if len(numadresse.relation_as_building) == 0:
+		if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
 			fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
 		else:
-			for eb in numadresse.relation_as_building:
+			for eb in numadresse.addr_as_node_on_building:
+				fout.write("\t\t<member type=\"node\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
+			for eb in numadresse.addr_as_building_way:
 				fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
 				
 	street_name = dicts.noms_voies[v]['cadastre'].title()

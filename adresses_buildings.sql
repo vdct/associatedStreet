@@ -107,25 +107,30 @@ SELECT id_building
 FROM	buildings_complementaires);
 
 -- rabbatement des points Adresse
-UPDATE tmp_building_segments
-SET eligible = 0
-WHERE id_building IN (SELECT id_building
+UPDATE 	tmp_building_segments
+SET 	eligible = 0
+WHERE 	id_building IN (SELECT id_building
 						FROM	buildings_complementaires);
-UPDATE tmp_building_segments
-SET eligible = 0
-WHERE id_building IN (SELECT id_building
+UPDATE 	tmp_building_segments
+SET 	eligible = 0
+WHERE 	id_building IN (SELECT id_building
 						FROM	buildings_hors_voies) AND
 		eligible = 1;
 						
-UPDATE tmp_building_segments
-SET eligible = 0
-WHERE id_node1||'-'||id_node2 IN (SELECT id_node1||'-'||id_node2
+UPDATE	tmp_building_segments
+SET		eligible = 0
+WHERE	id_node1||'-'||id_node2 IN (SELECT id_node1||'-'||id_node2
 								FROM	tmp_building_segments
 								WHERE 	eligible = 0
 								UNION
 								SELECT id_node2||'-'||id_node1
 								FROM	tmp_building_segments
 								WHERE 	eligible = 0) AND
+		eligible = 1;
+
+UPDATE 	tmp_building_segments
+SET 	eligible = 0
+WHERE 	ST_Length(geometrie) < 2 AND
 		eligible = 1;
 
 DROP TABLE IF EXISTS centres_segments CASCADE;

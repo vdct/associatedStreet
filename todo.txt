@@ -1,13 +1,14 @@
 - détecter la présence de n° de rue voire d'une relation associatedStreet
 - inclure la géométrie des rôles street
 - ajouter le user pour les objets déjà en base
-- charger en base le tag wall pour discriminer
-- tiercé 1
-	- éliminer les segments utilisés +1 fois
-	- éliminer les segments wall=no
 - transverse :
 	- récupérer les adresses sur node et building avec le duo addr:street/addr:housenumber et les considérer en priorité pour les parcelles concernées
 	- récupérer les relations associatedStreet existantes et les augmenter
 
+2014/0131
+- tiercé 1
+	- éliminer les segments utilisés +1 fois
+	- éliminer les segments wall=no
+- charger en base le tag wall pour discriminer
 2014/01/29
 - inclure dans les fichiers tous les buildings des parcelles de la voie, pas seulement ceux modifiés
