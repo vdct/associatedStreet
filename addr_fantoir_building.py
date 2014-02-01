@@ -2,8 +2,10 @@
 import psycopg2
 from pg_connexion import get_pgc
 import urllib,urllib2
-import os
+import os,gc,time
 import xml.etree.ElementTree as ET
+
+debut_total = time.time()
 
 class Dicts:
 	def __init__(self):
@@ -400,11 +402,13 @@ for b in xmlbuldings.iter('way'):
 	for tg in b.iter('tag'):
 		dtags[tg.get('k')] = tg.get('v')
 	buildings.add_building(Building(g,dtags,b.attrib),b.get('id'))
+del xmlbuldings
+gc.collect()
 
 print('chargement des polygones...')
 cur_buildings = pgc.cursor()
-str_query = '''DROP TABLE IF EXISTS tmp_building CASCADE;
-				CREATE TABLE tmp_building
+str_query = '''DROP TABLE IF EXISTS tmp_building_'''+code_insee+''' CASCADE;
+				CREATE TABLE tmp_building_'''+code_insee+'''
 				(geometrie geometry,
 				id_building double precision,
 				wall character varying (250));
@@ -415,7 +419,7 @@ str_query = ""
 for idx,id in enumerate(buildings.b):
 	if not buildings.b[id].is_valid_geom:
 		continue
-	str_query = str_query+'''INSERT INTO tmp_building 
+	str_query = str_query+'''INSERT INTO tmp_building_'''+code_insee+'''
 						(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(buildings.b[id].geom.get_geom_as_linestring_text())+''')),4326),2154),
 						'''+id+''',\''''+buildings.b[id].wall+'''\');'''
 	if idx%100 == 0 and str_query != "":
@@ -425,8 +429,8 @@ if str_query != "":
 	cur_buildings.execute(str_query+"COMMIT;")
 
 print('chargement des segments...')
-str_query = '''DROP TABLE IF EXISTS tmp_building_segments CASCADE;
-				CREATE TABLE tmp_building_segments
+str_query = '''DROP TABLE IF EXISTS tmp_building_segments_'''+code_insee+''' CASCADE;
+				CREATE TABLE tmp_building_segments_'''+code_insee+'''
 				(geometrie geometry,
 				id_building double precision,
 				id_node1 double precision,
@@ -442,7 +446,7 @@ for idx,id in enumerate(buildings.b):
 		continue
 	for nn in range(0,len(buildings.b[id].geom.a_nodes)-1):
 		s_stline = get_line_in_st_line_format([buildings.b[id].geom.a_nodes[nn],buildings.b[id].geom.a_nodes[nn+1]])
-		str_query = str_query+'''INSERT INTO tmp_building_segments 
+		str_query = str_query+'''INSERT INTO tmp_building_segments_'''+code_insee+''' 
 						(SELECT ST_Transform(ST_SetSRID('''+s_stline+''',4326),2154),
 						'''+id+''',
 						'''+buildings.b[id].geom.a_nodes[nn]+''',
@@ -453,6 +457,7 @@ for idx,id in enumerate(buildings.b):
 			str_query = ""
 if str_query != "":
 	cur_buildings.execute(str_query+"COMMIT;")
+str_query = ""
 
 parcelles = Parcelles()
 print('mise en cache des parcelles...')
@@ -479,11 +484,13 @@ for p in xmlparcelles.iter('way'):
 			par = Parcelle(pg,addrs[sa]['housenumber'],normalize(addrs[sa]['street']))
 			parcelles.add_parcelle(par,p.get('id'))
 			dicts.add_voie('parcelle',addrs[sa]['street'])
+del xmlparcelles
+gc.collect()
 
 print('chargement...')
 cur_parcelles = pgc.cursor()
-str_query = '''DROP TABLE IF EXISTS tmp_parcelles CASCADE;
-				CREATE TABLE tmp_parcelles
+str_query = '''DROP TABLE IF EXISTS tmp_parcelles_'''+code_insee+''' CASCADE;
+				CREATE TABLE tmp_parcelles_'''+code_insee+''' 
 				(geometrie geometry,
 				id_parcelle double precision,
 				numero character varying(50),
@@ -494,7 +501,7 @@ cur_parcelles.execute(str_query)
 str_query = ""
 for idx,id in enumerate(parcelles.p):
 	for pe in parcelles.p[id]:
-		str_query = str_query+'''INSERT INTO tmp_parcelles 
+		str_query = str_query+'''INSERT INTO tmp_parcelles_'''+code_insee+''' 
 						(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(pe.geom.get_geom_as_linestring_text())+''')),4326),2154),
 						'''+id+''',\''''+pe.numero+'''\',\''''+pe.voie+'''\');'''
 
@@ -528,8 +535,8 @@ for n in xmladresses.iter('node'):
 			
 print('chargement...')
 cur_adresses = pgc.cursor()
-str_query = '''DROP TABLE IF EXISTS tmp_adresses CASCADE;
-				CREATE TABLE tmp_adresses
+str_query = '''DROP TABLE IF EXISTS tmp_adresses_'''+code_insee+''' CASCADE;
+				CREATE TABLE tmp_adresses_'''+code_insee+'''
 				(geometrie geometry,
 				id_adresse double precision,
 				numero character varying(50),
@@ -541,7 +548,7 @@ str_query = ""
 for idx,voie in enumerate(adresses.a):
 	for num in adresses.a[voie]['numeros']:
 		ad = adresses.a[voie]['numeros'][num]
-		str_query = str_query+'''INSERT INTO tmp_adresses 
+		str_query = str_query+'''INSERT INTO tmp_adresses_'''+code_insee+''' 
 						(SELECT ST_Transform('''+ad.node.get_geom_as_text()+''',
 						2154),'''+str(ad.node.id)+''',\''''+num+'''\',\''''+voie+'''\');'''
 
@@ -590,6 +597,8 @@ fsql = open(fnsql,'rb')
 str_query = fsql.read()
 fsql.close()
 
+str_query = str_query.replace('__com__','_'+code_insee)
+
 cur_sql = pgc.cursor()
 cur_sql.execute(str_query+'COMMIT;')
 
@@ -602,7 +611,7 @@ if tierce == '1':
 							indice_node_1,
 							numero,
 							voie
-					FROM points_adresse_sur_building;'''
+					FROM points_adresse_sur_building_'''+code_insee+''';'''
 	cur_addr_node_building.execute(str_query)
 	for c in cur_addr_node_building:
 		new_node_id = nodes.add_new_node(c[0],c[1],{'addr:housenumber':c[4]})
@@ -618,7 +627,7 @@ if tierce == '2':
 							id_adresse::integer,
 							numero,
 							voie
-					FROM adresse_sur_buildings;'''
+					FROM adresse_sur_buildings_'''+code_insee+''';'''
 	cur_addr_way_building.execute(str_query)
 
 	for c in cur_addr_way_building:
@@ -630,7 +639,7 @@ if tierce == '2':
 	cur_addr_building_comp = pgc.cursor()
 	str_query = '''SELECT id_building::integer,
 							voie
-					FROM buildings_complementaires;'''
+					FROM buildings_complementaires_'''+code_insee+''';'''
 	cur_addr_building_comp.execute(str_query)
 
 	for c in cur_addr_building_comp:
@@ -744,6 +753,9 @@ s = "     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm
 print(s)
 ftmpkeys.write(s+'\n')
 ftmpkeys.close()
+fin_total = time.time()
+
+print('Execution en '+str(int(fin_total - debut_total))+' s.')
 
 # mode 1 : addr:housenumber comme tag du building
 #			sinon point adresse seul à la place fournie en entree

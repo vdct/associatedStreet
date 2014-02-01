@@ -4,6 +4,8 @@
 - transverse :
 	- récupérer les adresses sur node et building avec le duo addr:street/addr:housenumber et les considérer en priorité pour les parcelles concernées
 	- récupérer les relations associatedStreet existantes et les augmenter
+- tiercé 1
+	- détection des cours d'immeuble pour y interdire la projection
 
 2014/0131
 - tiercé 1
