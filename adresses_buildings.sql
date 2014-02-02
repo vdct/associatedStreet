@@ -19,8 +19,8 @@ CREATE INDEX gidx_tmp_building__com__
 ON tmp_building__com__
 USING GIST(geometrie);
 
-DROP TABLE IF EXISTS bulding_parcelle__com__ CASCADE;
-CREATE TABLE bulding_parcelle__com__
+DROP TABLE IF EXISTS building_parcelle__com__ CASCADE;
+CREATE TABLE building_parcelle__com__
 AS
 SELECT b.*,
 		p.numero,
@@ -30,39 +30,49 @@ JOIN tmp_building__com__ b
 ON ST_Contains(p.geometrie,b.geometrie);
 
 -- Election des batiments
---1 batiments en dur de + de 15m2 au sol
+--1 batiments en dur de + de 25m2 au sol
 DROP TABLE IF EXISTS batiments_possibles__com__ CASCADE;
 CREATE TABLE batiments_possibles__com__
 AS
 SELECT 	b.*,1 etape
-FROM	bulding_parcelle b
-WHERE	ST_Area(b.geometrie) > 15 AND
+FROM	building_parcelle__com__ b
+WHERE	ST_Area(b.geometrie) > 25 AND
 		b.wall != 'no';
 --2 batiments legers de + de 15m2 au sol
 INSERT INTO batiments_possibles__com__
 SELECT 	b.*,2 etape
-FROM	bulding_parcelle__com__ b
+FROM	building_parcelle__com__ b
 LEFT OUTER JOIN batiments_possibles__com__ bj
 ON		b.numero = bj.numero 		AND
 		b.voie = bj.voie
 WHERE	ST_Area(b.geometrie) > 15 	AND
-		b.wall = 'no' 				AND
+		b.wall != 'no' 				AND
 		bj.numero IS NULL;
---3 le + grand batiment pour les parcelles restantes
+--3 batiments legers de + de 30m2 au sol
 INSERT INTO batiments_possibles__com__
 SELECT 	b.*,3 etape
-FROM	bulding_parcelle__com__ b
+FROM	building_parcelle__com__ b
+LEFT OUTER JOIN batiments_possibles__com__ bj
+ON		b.numero = bj.numero 		AND
+		b.voie = bj.voie
+WHERE	ST_Area(b.geometrie) > 30 	AND
+		b.wall = 'no' 				AND
+		bj.numero IS NULL;
+--4 le + grand batiment pour les parcelles restantes
+INSERT INTO batiments_possibles__com__
+SELECT 	b.*,3 etape
+FROM	building_parcelle__com__ b
 JOIN 	(SELECT id_building,rank() OVER (PARTITION BY numero,voie ORDER BY ST_Area(geometrie) desc) rang
-		FROM bulding_parcelle__com__)r
+		FROM building_parcelle__com__)r
 ON	b.id_building = r.id_building
-LEFT OUTER JOIN bulding_parcelle__com__ bj
+LEFT OUTER JOIN building_parcelle__com__ bj
 ON		b.numero = bj.numero 	AND
 		b.voie = bj.voie
 WHERE	r.rang = 1 				AND
 		bj.numero IS NULL;
 		
-DROP TABLE IF EXISTS bulding_mono_parcelle__com__ CASCADE;
-CREATE TABLE bulding_mono_parcelle__com__
+DROP TABLE IF EXISTS building_mono_parcelle__com__ CASCADE;
+CREATE TABLE building_mono_parcelle__com__
 AS
 SELECT bp.geometrie,
 	bp.id_building,
@@ -82,7 +92,7 @@ SELECT b.id_building,
 	a.id_adresse,
 	b.numero,
 	b.voie
-FROM	bulding_mono_parcelle__com__ b
+FROM	building_mono_parcelle__com__ b
 JOIN	tmp_adresses__com__ a
 ON	a.voie = b.voie AND
 	a.numero = b.numero;
@@ -92,7 +102,7 @@ CREATE TABLE buildings_complementaires__com__
 AS
 SELECT id_building,
 		voie
-FROM	bulding_parcelle__com__
+FROM	building_parcelle__com__
 EXCEPT
 SELECT id_building,
 		voie
@@ -148,6 +158,7 @@ WHERE 	ST_Length(geometrie) < 2 AND
 
 DROP TABLE IF EXISTS centres_segments__com__ CASCADE;
 CREATE TABLE centres_segments__com__
+WITH (OIDS=TRUE)
 AS
 SELECT ST_Centroid(geometrie) geometrie,
 	id_building,
@@ -156,6 +167,57 @@ SELECT ST_Centroid(geometrie) geometrie,
 	indice_node_1
 FROM	tmp_building_segments__com__
 WHERE	eligible = 1;
+
+-- Detection des grandes facades
+CREATE TABLE buildings_mitoyens__com__
+AS
+SELECT b.id_building
+FROM tmp_building_segments__com__ b
+JOIN 	(SELECT id_node1
+	FROM	(SELECT id_node1 FROM tmp_building_segments__com__
+		UNION ALL
+		SELECT id_node2 FROM tmp_building_segments__com__)a
+	GROUP BY 1
+	HAVING count(*) > 3) n
+ON n.id_node1 = b.id_node1
+UNION
+SELECT b.id_building
+FROM tmp_building_segments__com__ b
+JOIN 	(SELECT id_node1
+	FROM	(SELECT id_node1 FROM tmp_building_segments__com__
+		UNION ALL
+		SELECT id_node2 FROM tmp_building_segments__com__)a
+	GROUP BY 1
+	HAVING count(*) > 3) n
+ON n.id_node1 = b.id_node2;
+
+DROP TABLE IF EXISTS mbc__com__ CASCADE;
+CREATE TABLE mbc__com__
+AS
+SELECT ST_MinimumBoundingCircle(geometrie,4) geometrie_cercle,
+		ST_Area(geometrie)::integer surface_building,
+		0::integer surface_cercle,
+		b.id_building,
+		ST_Centroid(geometrie) geometrie_centroid
+FROM 	building_mono_parcelle__com__ b
+LEFT OUTER JOIN buildings_mitoyens__com__ m
+ON		b.id_building = m.id_building AND
+		m.id_building IS NULL;
+		
+UPDATE mbc__com__
+SET surface_cercle = ST_Area(geometrie_cercle);
+
+DELETE FROM centres_segments__com__
+WHERE oid IN (SELECT oid
+			FROM	(SELECT c.oid,rank() over(partition by c.id_building order by ST_Distance(c.geometrie,m.geometrie_centroid))rang
+					FROM mbc__com__ m
+					JOIN	centres_segments__com__ c
+					ON m.id_building = c.id_building
+					WHERE m.surface_cercle > 3 * surface_building)s
+			WHERE rang > 2);
+
+-- Pour les grandes facades, on retient comme possible point d'accroche
+-- les 2 plus proches du centroide de l'objet
 
 DROP TABLE IF EXISTS points_adresse_sur_building__com__ CASCADE;
 CREATE TABLE points_adresse_sur_building__com__
@@ -167,7 +229,7 @@ FROM
 			ST_Y(ST_Transform(c.geometrie,4326)) lat,
 			ab.numero,
 			ab.voie,
-			RANK() OVER(PARTITION BY ab.numero,ab.voie ORDER BY ST_Distance(c.geometrie,a.geometrie)) rang
+			RANK() OVER(PARTITION BY ab.numero,ab.voie,c.id_building ORDER BY ST_Distance(c.geometrie,a.geometrie)) rang
 	FROM	centres_segments__com__ c
 	JOIN	adresse_sur_buildings__com__ ab
 	ON		c.id_building = ab.id_building

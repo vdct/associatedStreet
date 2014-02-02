@@ -6,6 +6,7 @@
 	- récupérer les relations associatedStreet existantes et les augmenter
 - tiercé 1
 	- détection des cours d'immeuble pour y interdire la projection
+	- détection des grandes façades pour y privilégier la projection
 
 2014/0131
 - tiercé 1
