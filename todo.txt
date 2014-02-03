@@ -1,14 +1,19 @@
 - détecter la présence de n° de rue voire d'une relation associatedStreet
-- inclure la géométrie des rôles street
 - ajouter le user pour les objets déjà en base
 - transverse :
 	- récupérer les adresses sur node et building avec le duo addr:street/addr:housenumber et les considérer en priorité pour les parcelles concernées
 	- récupérer les relations associatedStreet existantes et les augmenter
+	un objet avec addr:housenumber seul -> fixme ?
+	- fabriquer les relations avec l'existant avec PostGIS
+	- marquer les adresses concernees pour les ignorer dans les traitements
 - tiercé 1
 	- détection des cours d'immeuble pour y interdire la projection
-	- détection des grandes façades pour y privilégier la projection
 
-2014/0131
+2014/02/01
+- inclure la géométrie des rôles street
+- détection des grandes façades pour y privilégier la projection
+
+2014/01/31
 - tiercé 1
 	- éliminer les segments utilisés +1 fois
 	- éliminer les segments wall=no
