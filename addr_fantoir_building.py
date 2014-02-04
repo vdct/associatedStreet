@@ -208,6 +208,9 @@ class Node:
 	def get_geom_as_text(self):
 		strp = 'ST_PointFromText(\'POINT('+str(self.lon)+' '+str(self.lat)+')\',4326)'
 		return strp
+	def move_to(self,lon,lat):
+		self.lon = lon
+		self.lat = lat
 	def get_as_osm_xml_node(self):
 		s_modified = ""
 		if self.modified:
@@ -227,8 +230,13 @@ class Nodes:
 		self.min_id = 0
 	def load_xml_node(self,xml_node,tags):
 		id = xml_node.get('id')
-		self.n[id]= Node(xml_node.get('lon'),xml_node.get('lat'),id,xml_node.get('version'),tags)
+		version = xml_node.get('version')
+		if not version:
+			version = 0
+		self.n[id]= Node(xml_node.get('lon'),xml_node.get('lat'),id,version,tags)
 		self.min_id = min(self.min_id,int(id))
+#		if id == '535300376':
+#			os._exit(0)
 	def load_new_node_from_xml(self,xml_node,tags):
 		n = self.add_new_node(xml_node.get('lon'),xml_node.get('lat'),tags)
 		return n
@@ -248,33 +256,6 @@ class WayGeom:
 			a_n.append(str(nodes.n[ni].lon)+' '+str(nodes.n[ni].lat))
 		res = res+','.join(a_n)+')\''
 		return res	
-# class Building:
-	# def __init__(self,geom,tags,attrib):
-		# self.geom = geom
-		# self.tags = tags
-		# self.attrib = attrib
-		# self.modified = False
-		# self.sent = False
-
-		# check_valid_building()
-
-# class Buildings:
-	# def __init__(self):
-		# self.b = {}
-	# def add_building(self,b,id):
-		# self.b[id] = b
-	# def insert_new_point(self,b_id,n_id,offset):
-		# if b_id not in self.b:
-			# print('Batiment '+str(b_id)+' absent')
-			# print('Node ('+str(nodes.n[n_id].lon)+','+str(nodes.n[n_id].lat)+') non rattache')
-		# else:
-			# b_geom = self.b[b_id].geom.a_nodes
-			# b_geom.insert(offset+1,n_id)
-			# self.b[b_id].geom.a_nodes = b_geom
-			# self.b[b_id].modified = True
-	# def add_tag(self,b_id,k,v):
-		# self.b[b_id].tags[k] = v
-		# self.b[b_id].modified = True
 class Way:
 	def __init__(self,geom,tags,attrib,osm_key):
 		self.geom = geom
@@ -333,7 +314,6 @@ class Ways:
 				'parcelle':{}}
 	def add_way(self,w,id,osm_key):
 		self.w[osm_key][id] = w
-
 class Parcelle:
 	def __init__(self,geom,numero,voie):
 		self.geom = geom
@@ -409,9 +389,10 @@ def get_tags(xmlo):
 	for tg in xmlo.iter('tag'):
 		dtags[tg.get('k')] = tg.get('v')
 	return dtags
-def download_from_overpass(way_type,target_file_name):
+def download_ways_from_overpass(way_type,target_file_name):
 	d_url = urllib.quote('http://overpass-api.de/api/interpreter?data=node(area:'+str(3600000000+dicts.osm_insee[code_insee])+');way(bn);(way._["'+way_type+'"];node(w););out meta;',':/?=')
 	d_url = d_url.replace('way._','way%2E%5F').replace('area:','area%3A')
+#node(area:3600076381);rel(bn);(relation._["type"="associatedStreet"];);(._;>;);out meta;;
 	print('telechargement des '+way_type+' OSM...')
 	try:
 		resp = urllib2.urlopen(d_url)
@@ -460,7 +441,7 @@ def main():
 
 	fnbuilding = building_rep+'/buildings_'+code_insee+'.osm'
 	if not os.path.exists(fnbuilding):
-		download_from_overpass('building',fnbuilding)
+		download_ways_from_overpass('building',fnbuilding)
 			
 	print('mise en cache des buildings...')
 	xmlbuldings = ET.parse(fnbuilding)
@@ -585,12 +566,12 @@ def main():
 					dict_node_relations[n.get('ref')] = normalize(t.get('v'))
 			dicts.add_voie('cadastre',t.get('v'))
 
+	load_nodes_from_xml_parse(xmladresses)
 	for n in xmladresses.iter('node'):
-		dtags = get_tags(n)
-		node_id = nodes.load_new_node_from_xml(n,dtags)
-		nodes.n[node_id].modified = True
-		if 'addr:housenumber' in dtags and n.get('id') in dict_node_relations:
-			ad = Adresse(nodes.n[node_id],dtags['addr:housenumber'],dict_node_relations[n.get('id')])
+		n_id = n.get('id')
+		nodes.n[n_id].modified = True
+		if 'addr:housenumber' in nodes.n[n_id].tags and n_id in dict_node_relations:
+			ad = Adresse(nodes.n[n_id],nodes.n[n_id].tags['addr:housenumber'],dict_node_relations[n_id])
 			adresses.add_adresse(ad)
 				
 	print('chargement...')
@@ -623,7 +604,7 @@ def main():
 		os.mkdir(highway_rep)
 	fnhighway = highway_rep+'/highways_'+code_insee+'.osm'
 	if not os.path.exists(fnhighway):
-		download_from_overpass('highway',fnhighway)
+		download_ways_from_overpass('highway',fnhighway)
 	
 	print('mise en cache des voies...')
 	dict_ways_osm = {}
@@ -661,13 +642,14 @@ def main():
 								id_building::integer,
 								indice_node_1,
 								numero,
-								voie
+								voie,
+								id_adresse::integer
 						FROM points_adresse_sur_building_'''+code_insee+''';'''
 		cur_addr_node_building.execute(str_query)
 		for c in cur_addr_node_building:
-			new_node_id = nodes.add_new_node(c[0],c[1],{'addr:housenumber':c[4]})
-			ways.w['building'][str(c[2])].insert_new_point(new_node_id,c[3])
-			adresses.a[c[5]]['numeros'][c[4]].add_addr_as_node_on_building(new_node_id)
+			nodes.n[str(c[6])].move_to(c[0],c[1])
+			ways.w['building'][str(c[2])].insert_new_point(str(c[6]),c[3])
+			adresses.a[c[5]]['numeros'][c[4]].add_addr_as_node_on_building(str(c[6]))
 			adresses.a[c[5]]['numeros'][c[4]].add_building_for_addr_node(str(c[2]))
 		
 	if tierce == '2':
@@ -707,8 +689,6 @@ def main():
 	nb_voies_total = 0
 	nb_voies_fantoir = 0
 	nb_voies_osm = 0
-
-	# dictionnaire pour dedoublonner les nodes a l'ecriture
 
 	print('Fichiers associatedStreet...')
 	for v in adresses.a:	

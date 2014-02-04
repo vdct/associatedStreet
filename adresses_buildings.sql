@@ -169,6 +169,7 @@ FROM	tmp_building_segments__com__
 WHERE	eligible = 1;
 
 -- Detection des grandes facades
+DROP TABLE IF EXISTS buildings_mitoyens__com__ CASCADE;
 CREATE TABLE buildings_mitoyens__com__
 AS
 SELECT b.id_building
@@ -227,6 +228,7 @@ FROM
 	(SELECT c.*,
 			ST_X(ST_Transform(c.geometrie,4326)) lon,
 			ST_Y(ST_Transform(c.geometrie,4326)) lat,
+			a.id_adresse,
 			ab.numero,
 			ab.voie,
 			RANK() OVER(PARTITION BY ab.numero,ab.voie,c.id_building ORDER BY ST_Distance(c.geometrie,a.geometrie)) rang
