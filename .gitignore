@@ -213,3 +213,11 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+
+#donnees OSM
+pg_connexion.py
+parcelles_adresses/
+osm_output/
+fantoir/
+cache_buildings/
+cache_highways/

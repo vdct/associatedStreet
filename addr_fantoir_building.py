@@ -2,7 +2,7 @@
 import psycopg2
 from pg_connexion import get_pgc
 import urllib,urllib2
-import os,gc,time
+import sys,os,gc,time
 import xml.etree.ElementTree as ET
 
 debut_total = time.time()
@@ -27,7 +27,7 @@ class Dicts:
 						'O':[u'Ö',u'Ô'],
 						'U':[u'Û',u'Ü']}
 	def load_fantoir(self,insee):
-		fndep = insee[0:2]+'0.txt'
+		fndep = 'fantoir/'+insee[0:2]+'0.txt'
 		if not os.path.exists(fndep):
 			print('Fichier FANTOIR "'+fndep+'" absent du répertoire')
 			print('Telechargeable ici : http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits')
@@ -404,26 +404,32 @@ def download_ways_from_overpass(way_type,target_file_name):
 		print('\n******* récupération des '+way_type+' KO ********')
 		print('Abandon')
 		os._exit(0)
-def main():
+def main(args):
+	if len(args) < 4:
+		print('USAGE : python addr_fantoir_building.py <code INSEE> <code Cadastre> <1|2> (nom de la commune)')
+		print('1 : adresses comme points sur les bâtiments')
+		print('2 : adresses comme tags des ways building')
+		os._exit(0)
+		
 	global code_insee,code_cadastre
-	code_insee = raw_input('=> Code INSEE : ')
-	code_cadastre = raw_input('=> Code Cadastre : ')
+	code_insee = args[1]
+	code_cadastre = args[2]
 	global dicts
 	dicts = Dicts()
 	dicts.load_all(code_insee)
 	pgc = get_pgc()
-
-	nom_ville = raw_input('=> Nom de la ville (facultatif) : ')
-	nom_ville = normalize(nom_ville).replace(' ','_')
-	print('### Style 1 : nouveau point addr:housenumber sur le batiment (defaut)')
-	print('###       2 : ajout du tag addr:housenumber sur le polygone du batiment\n')
-	tierce = raw_input('=> Style : ')
+	tierce = args[3]
 	if str(tierce) not in ['1','2']:
 		tierce = '1'
+	nom_ville = ''
+	if len(args) > 4:
+		nom_ville = ' '.join(args[4:])
+		nom_ville = normalize(nom_ville).replace(' ','_')
 
-	fnparcelles = code_cadastre+'-parcelles.osm'
-	fnadresses = code_cadastre+'-adresses.osm'
-	dirout = '_'.join(['adresses',nom_ville,code_insee[0:2],code_cadastre,'style',tierce])
+	rep_parcelles_adresses = 'parcelles_adresses'
+	fnparcelles = rep_parcelles_adresses+'/'+code_cadastre+'-parcelles.osm'
+	fnadresses = rep_parcelles_adresses+'/'+code_cadastre+'-adresses.osm'
+	dirout = 'osm_output/'+'_'.join(['adresses',nom_ville,code_insee[0:2],code_cadastre,'style',tierce])
 	if not os.path.exists(dirout):
 		os.mkdir(dirout)
 		
@@ -432,10 +438,8 @@ def main():
 		os.mkdir(building_rep)
 
 	global nodes,ways
-	#,buildings,parcelles,adresses
 	nodes = Nodes()
 	ways = Ways()
-	#buildings = Buildings()
 	parcelles = Parcelles()
 	adresses = Adresses()
 
@@ -806,4 +810,4 @@ def main():
 	# mode 2 : addr:housenumber comme point à mi-longueur du plus proche coté du point initial
 	#			sinon point adresse seul à la place fournie en entree
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
