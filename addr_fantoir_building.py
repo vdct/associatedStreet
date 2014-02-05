@@ -429,7 +429,10 @@ def main(args):
 	rep_parcelles_adresses = 'parcelles_adresses'
 	fnparcelles = rep_parcelles_adresses+'/'+code_cadastre+'-parcelles.osm'
 	fnadresses = rep_parcelles_adresses+'/'+code_cadastre+'-adresses.osm'
-	dirout = 'osm_output/'+'_'.join(['adresses',nom_ville,code_insee[0:2],code_cadastre,'style',tierce])
+	root_dir_out = 'osm_output'
+	if not os.path.exists(root_dir_out):
+		os.mkdir(root_dir_out)
+	dirout = root_dir_out+'/'+'_'.join(['adresses',nom_ville,code_insee[0:2],code_cadastre,'style',tierce])
 	if not os.path.exists(dirout):
 		os.mkdir(dirout)
 		
