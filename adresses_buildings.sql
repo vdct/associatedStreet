@@ -1,22 +1,22 @@
-DROP TABLE IF EXISTS tmp_parcelles_union__com__ CASCADE;
-CREATE TABLE tmp_parcelles_union__com__
+DROP TABLE IF EXISTS parcelles_union__com__ CASCADE;
+CREATE TABLE parcelles_union__com__
 AS
 SELECT ST_Union(geometrie) AS geometrie,
 		numero,
 		voie
-FROM	tmp_parcelles__com__
+FROM	parcelles__com__
 GROUP BY 2,3;
 
-DROP TABLE IF EXISTS tmp_parcelles_union_buffer__com__ CASCADE;
-CREATE TABLE tmp_parcelles_union_buffer__com__
+DROP TABLE IF EXISTS parcelles_union_buffer__com__ CASCADE;
+CREATE TABLE parcelles_union_buffer__com__
 AS
 SELECT ST_Buffer(geometrie,1,'quad_segs=2') AS geometrie,
 		numero,
 		voie
-FROM	tmp_parcelles_union__com__;
+FROM	parcelles_union__com__;
 
-CREATE INDEX gidx_tmp_building__com__ 
-ON tmp_building__com__
+CREATE INDEX gidx_building__com__ 
+ON building__com__
 USING GIST(geometrie);
 
 DROP TABLE IF EXISTS building_parcelle__com__ CASCADE;
@@ -25,8 +25,8 @@ AS
 SELECT b.*,
 		p.numero,
 		p.voie
-FROM tmp_parcelles_union_buffer__com__ p
-JOIN tmp_building__com__ b
+FROM parcelles_union_buffer__com__ p
+JOIN building__com__ b
 ON ST_Contains(p.geometrie,b.geometrie);
 
 -- Election des batiments
@@ -93,7 +93,7 @@ SELECT b.id_building,
 	b.numero,
 	b.voie
 FROM	building_mono_parcelle__com__ b
-JOIN	tmp_adresses__com__ a
+JOIN	adresses__com__ a
 ON	a.voie = b.voie AND
 	a.numero = b.numero;
 
@@ -112,7 +112,7 @@ DROP TABLE IF EXISTS buildings_hors_voies__com__ CASCADE;
 CREATE TABLE buildings_hors_voies__com__
 AS
 SELECT id_building
-FROM	tmp_building__com__
+FROM	building__com__
 EXCEPT
 (SELECT id_building
 FROM	adresse_sur_buildings__com__
@@ -122,37 +122,37 @@ FROM	buildings_complementaires__com__);
 
 -- rabbatement des points Adresse
 --- Impossible de rabattre sur un batiment hors parcelle mono adresse
-UPDATE 	tmp_building_segments__com__
+UPDATE 	building_segments__com__
 SET 	eligible = 0
 WHERE 	id_building IN (SELECT id_building
 						FROM	buildings_complementaires__com__);
 --- Impossible de rabattre sur un batiment hors parcelle mono adresse
-UPDATE 	tmp_building_segments__com__
+UPDATE 	building_segments__com__
 SET 	eligible = 0
 WHERE 	id_building IN (SELECT id_building
 						FROM	buildings_hors_voies__com__) AND
 		eligible = 1;
 						
 --- Impossible de rabattre sur un segment mitoyen
-UPDATE	tmp_building_segments__com__
+UPDATE	building_segments__com__
 SET		eligible = 0
 WHERE	id_node1||'-'||id_node2 IN (SELECT nd
 									FROM	(SELECT id_node1||'-'||id_node2 nd
-											FROM	tmp_building_segments__com__
+											FROM	building_segments__com__
 											UNION ALL
 											SELECT id_node2||'-'||id_node1
-											FROM	tmp_building_segments__com__)a
+											FROM	building_segments__com__)a
 									GROUP BY 1
 									HAVING count(*) > 1) AND
 		eligible = 1;
 
 --- Priorite aux segments de + de 2m
-UPDATE 	tmp_building_segments__com__
+UPDATE 	building_segments__com__
 SET 	eligible = 0
 WHERE 	ST_Length(geometrie) < 2 AND
 		eligible = 1 AND
 		id_building IN (SELECT id_building
-						FROM	tmp_building_segments__com__
+						FROM	building_segments__com__
 						WHERE 	eligible = 1 AND
 						ST_Length(geometrie) > 2);
 
@@ -165,7 +165,7 @@ SELECT ST_Centroid(geometrie) geometrie,
 	id_node1,
 	id_node2,
 	indice_node_1
-FROM	tmp_building_segments__com__
+FROM	building_segments__com__
 WHERE	eligible = 1;
 
 -- Detection des grandes facades
@@ -173,21 +173,21 @@ DROP TABLE IF EXISTS buildings_mitoyens__com__ CASCADE;
 CREATE TABLE buildings_mitoyens__com__
 AS
 SELECT b.id_building
-FROM tmp_building_segments__com__ b
+FROM building_segments__com__ b
 JOIN 	(SELECT id_node1
-	FROM	(SELECT id_node1 FROM tmp_building_segments__com__
+	FROM	(SELECT id_node1 FROM building_segments__com__
 		UNION ALL
-		SELECT id_node2 FROM tmp_building_segments__com__)a
+		SELECT id_node2 FROM building_segments__com__)a
 	GROUP BY 1
 	HAVING count(*) > 3) n
 ON n.id_node1 = b.id_node1
 UNION
 SELECT b.id_building
-FROM tmp_building_segments__com__ b
+FROM building_segments__com__ b
 JOIN 	(SELECT id_node1
-	FROM	(SELECT id_node1 FROM tmp_building_segments__com__
+	FROM	(SELECT id_node1 FROM building_segments__com__
 		UNION ALL
-		SELECT id_node2 FROM tmp_building_segments__com__)a
+		SELECT id_node2 FROM building_segments__com__)a
 	GROUP BY 1
 	HAVING count(*) > 3) n
 ON n.id_node1 = b.id_node2;
@@ -231,11 +231,13 @@ FROM
 			a.id_adresse,
 			ab.numero,
 			ab.voie,
-			RANK() OVER(PARTITION BY ab.numero,ab.voie,c.id_building ORDER BY ST_Distance(c.geometrie,a.geometrie)) rang
+			RANK() OVER(PARTITION BY ab.numero,ab.voie ORDER BY ST_Distance(c.geometrie,a.geometrie)) rang
 	FROM	centres_segments__com__ c
 	JOIN	adresse_sur_buildings__com__ ab
 	ON		c.id_building = ab.id_building
-	JOIN	tmp_adresses__com__ a
+	JOIN	adresses__com__ a
 	ON		ab.numero = a.numero AND
 			ab.voie = a.voie)a
 WHERE a.rang = 1;
+
+COMMIT;

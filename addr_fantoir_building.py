@@ -270,12 +270,13 @@ class Way:
 		if osm_key == 'building':
 			self.set_wall()
 			self.check_valid_building()
+		if osm_key == 'parcelle':
+			self.collect_adresses()
 	def set_wall(self):
 		if 'wall' not in self.tags:
 			self.wall = 'yes'
 		else:
 			self.wall = self.tags['wall']
-#		print(self.wall)
 	def check_valid_building(self):
 		if len(self.geom.a_nodes) < 4:
 			print('batiment invalide (au mois 4 points) Voir http://www.osm.org/way/'+id)
@@ -283,6 +284,19 @@ class Way:
 		if self.is_valid and self.geom.a_nodes[0] != self.geom.a_nodes[-1]:
 			print('batiment invalide (ouvert) Voir http://www.osm.org/way/'+id)
 			self.is_valid = False
+	def collect_adresses(self):
+		tmp_addrs = {}
+		self.addrs = {}
+		for t in self.tags.viewkeys():
+			if t[0:4] == 'addr':
+				num_addr = t.split(':')[0][4:]
+				if not num_addr in tmp_addrs:
+					tmp_addrs[num_addr] = {}
+				tmp_addrs[num_addr]['addr:'+t.split(':')[1]] = self.tags[t]
+		for sa in tmp_addrs.viewkeys():
+			if 'addr:street' in tmp_addrs[sa] and 'addr:housenumber' in tmp_addrs[sa]:
+				self.addrs[sa] = tmp_addrs[sa]
+				dicts.add_voie('parcelle',tmp_addrs[sa]['addr:street'])
 	def add_tag(self,k,v):
 		self.tags[k] = v
 		self.modified = True
@@ -307,6 +321,27 @@ class Way:
 			s = s+"\t\t<tag k=\""+k+"\" v=\""+self.tags[k].encode('utf8')+"\"/>\n"
 		s = s+"\t</way>\n"
 		return s
+	def get_as_SQL_import_building(self):
+		str_query = '''INSERT INTO building_'''+code_insee+'''
+							(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(self.geom.get_geom_as_linestring_text())+''')),4326),2154),
+							'''+self.attrib['id']+''',\''''+self.wall+'''\');'''
+		return str_query
+	def get_as_SQL_import_building_segment(self,indice):
+		s_stline = get_line_in_st_line_format([self.geom.a_nodes[indice],self.geom.a_nodes[indice+1]])
+		str_query = '''INSERT INTO building_segments_'''+code_insee+''' 
+						(SELECT ST_Transform(ST_SetSRID('''+s_stline+''',4326),2154),
+						'''+self.attrib['id']+''',
+						'''+self.geom.a_nodes[indice]+''',
+						'''+self.geom.a_nodes[indice+1]+''',
+						'''+str(indice)+''');'''
+		return str_query
+	def get_as_SQL_import_parcelle(self):
+		str_query = ""
+		for a in self.addrs:
+			str_query = str_query+'''INSERT INTO parcelles_'''+code_insee+''' 
+							(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(self.geom.get_geom_as_linestring_text())+''')),4326),2154),
+							'''+self.attrib['id']+''',\''''+self.addrs[a]['addr:housenumber']+'''\',\''''+self.addrs[a]['addr:street']+'''\');'''
+		return str_query
 class Ways:
 	def __init__(self):
 		self.w = {'highway':{},
@@ -314,11 +349,6 @@ class Ways:
 				'parcelle':{}}
 	def add_way(self,w,id,osm_key):
 		self.w[osm_key][id] = w
-class Parcelle:
-	def __init__(self,geom,numero,voie):
-		self.geom = geom
-		self.numero = numero
-		self.voie = voie
 class Parcelles:
 	def __init__(self):
 		self.p = {}
@@ -350,6 +380,7 @@ class Adresses:
 			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
 		self.a[cle]['numeros'][ad.numero] = ad
 	def add_batiment_complementaire(self,cle,b_id):
+		cle = normalize(cle)
 		if not cle in self.a:
 			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
 		self.a[cle]['batiments_complementaires'] = self.a[cle]['batiments_complementaires'] + [b_id]
@@ -358,9 +389,6 @@ def get_as_osm_xml_way(node_list,tags,attrib,modified):
 	if modified:
 		s_modified = "action=\"modify\" "
 	s = "\t<way id=\""+attrib['id']+"\" "+s_modified
-#	del attrib['id']
-#	if 'modify' in attrib:
-#		del attrib['modify']
 	for a in attrib:
 		if a == 'id' or a == 'modify':
 			continue
@@ -390,7 +418,7 @@ def get_tags(xmlo):
 		dtags[tg.get('k')] = tg.get('v')
 	return dtags
 def download_ways_from_overpass(way_type,target_file_name):
-	d_url = urllib.quote('http://overpass-api.de/api/interpreter?data=node(area:'+str(3600000000+dicts.osm_insee[code_insee])+');way(bn);(way._["'+way_type+'"];node(w););out meta;',':/?=')
+	d_url = urllib.quote('http://oapi-fr.openstreetmap.fr/oapi/interpreter?data=node(area:'+str(3600000000+dicts.osm_insee[code_insee])+');way(bn);(way._["'+way_type+'"];node(w););out meta;',':/?=')
 	d_url = d_url.replace('way._','way%2E%5F').replace('area:','area%3A')
 #node(area:3600076381);rel(bn);(relation._["type"="associatedStreet"];);(._;>;);out meta;;
 	print('telechargement des '+way_type+' OSM...')
@@ -404,6 +432,15 @@ def download_ways_from_overpass(way_type,target_file_name):
 		print('\n******* récupération des '+way_type+' KO ********')
 		print('Abandon')
 		os._exit(0)
+def	executeSQL_INSEE(fnsql,code_insee):
+	fsql = open(fnsql,'rb')
+	str_query = fsql.read()
+	fsql.close()
+	str_query = str_query.replace('__com__','_'+code_insee)
+	cur_sql = pgc.cursor()
+	cur_sql.execute(str_query)
+	cur_sql.close()
+	
 def main(args):
 	if len(args) < 4:
 		print('USAGE : python addr_fantoir_building.py <code INSEE> <code Cadastre> <1|2> (nom de la commune)')
@@ -417,7 +454,9 @@ def main(args):
 	global dicts
 	dicts = Dicts()
 	dicts.load_all(code_insee)
+	global pgc
 	pgc = get_pgc()
+	
 	tierce = args[3]
 	if str(tierce) not in ['1','2']:
 		tierce = '1'
@@ -459,23 +498,15 @@ def main(args):
 	del xmlbuldings
 	gc.collect()
 
+	executeSQL_INSEE('create_tables__com__.sql',code_insee)
+
 	print('chargement des polygones...')
 	cur_buildings = pgc.cursor()
-	str_query = '''DROP TABLE IF EXISTS tmp_building_'''+code_insee+''' CASCADE;
-					CREATE TABLE tmp_building_'''+code_insee+'''
-					(geometrie geometry,
-					id_building double precision,
-					wall character varying (250));
-					COMMIT;'''
-	cur_buildings.execute(str_query)
-
 	str_query = ""
 	for idx,id in enumerate(ways.w['building']):
 		if not ways.w['building'][id].is_valid:
 			continue
-		str_query = str_query+'''INSERT INTO tmp_building_'''+code_insee+'''
-							(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(ways.w['building'][id].geom.get_geom_as_linestring_text())+''')),4326),2154),
-							'''+id+''',\''''+ways.w['building'][id].wall+'''\');'''
+		str_query = str_query+ways.w['building'][id].get_as_SQL_import_building()
 		if idx%100 == 0 and str_query != "":
 			cur_buildings.execute(str_query+"COMMIT;")
 			str_query = ""
@@ -483,32 +514,15 @@ def main(args):
 		cur_buildings.execute(str_query+"COMMIT;")
 
 	print('chargement des segments...')
-	str_query = '''DROP TABLE IF EXISTS tmp_building_segments_'''+code_insee+''' CASCADE;
-					CREATE TABLE tmp_building_segments_'''+code_insee+'''
-					(geometrie geometry,
-					id_building double precision,
-					id_node1 double precision,
-					id_node2 double precision,
-					indice_node_1 integer,
-					eligible integer default 1);
-					COMMIT;'''
-	cur_buildings.execute(str_query)
-
 	str_query = ""
 	for idx,id in enumerate(ways.w['building']):
 		if not ways.w['building'][id].is_valid:
 			continue
 		for nn in range(0,len(ways.w['building'][id].geom.a_nodes)-1):
-			s_stline = get_line_in_st_line_format([ways.w['building'][id].geom.a_nodes[nn],ways.w['building'][id].geom.a_nodes[nn+1]])
-			str_query = str_query+'''INSERT INTO tmp_building_segments_'''+code_insee+''' 
-							(SELECT ST_Transform(ST_SetSRID('''+s_stline+''',4326),2154),
-							'''+id+''',
-							'''+ways.w['building'][id].geom.a_nodes[nn]+''',
-							'''+ways.w['building'][id].geom.a_nodes[nn+1]+''',
-							'''+str(nn)+''');'''
-			if idx%100 == 0 and str_query != "":
-				cur_buildings.execute(str_query+"COMMIT;")
-				str_query = ""
+			str_query = str_query+ways.w['building'][id].get_as_SQL_import_building_segment(nn)
+		if idx%100 == 0 and str_query != "":
+			cur_buildings.execute(str_query+"COMMIT;")
+			str_query = ""
 	if str_query != "":
 		cur_buildings.execute(str_query+"COMMIT;")
 	str_query = ""
@@ -518,44 +532,15 @@ def main(args):
 	xmlparcelles = ET.parse(fnparcelles)
 	load_nodes_from_xml_parse(xmlparcelles)
 	print('parcelles...')
-	for p in xmlparcelles.iter('way'):
-		a_n = []
-		for pn in p.iter('nd'):
-			a_n.append(pn.get('ref'))
-		pg = WayGeom(a_n)
-		addrs = {}
-		for t in p.iter('tag'):
-			if t.get('k')[0:4] == 'addr':
-				num_addr = t.get('k').split(':')[0][4:]
-				if not num_addr in addrs:
-					addrs[num_addr] = {}
-				addrs[num_addr][t.get('k').split(':')[1]] = t.get('v')
-		for sa in addrs:
-			if len(addrs[sa]) == 2:
-				par = Parcelle(pg,addrs[sa]['housenumber'],normalize(addrs[sa]['street']))
-				parcelles.add_parcelle(par,p.get('id'))
-				dicts.add_voie('parcelle',addrs[sa]['street'])
+	load_ways_from_xml_parse(xmlparcelles,'parcelle')
 	del xmlparcelles
 	gc.collect()
 
 	print('chargement...')
 	cur_parcelles = pgc.cursor()
-	str_query = '''DROP TABLE IF EXISTS tmp_parcelles_'''+code_insee+''' CASCADE;
-					CREATE TABLE tmp_parcelles_'''+code_insee+''' 
-					(geometrie geometry,
-					id_parcelle double precision,
-					numero character varying(50),
-					voie character varying (250));
-					COMMIT;'''
-	cur_parcelles.execute(str_query)
-
 	str_query = ""
-	for idx,id in enumerate(parcelles.p):
-		for pe in parcelles.p[id]:
-			str_query = str_query+'''INSERT INTO tmp_parcelles_'''+code_insee+''' 
-							(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(pe.geom.get_geom_as_linestring_text())+''')),4326),2154),
-							'''+id+''',\''''+pe.numero+'''\',\''''+pe.voie+'''\');'''
-
+	for idx,id in enumerate(ways.w['parcelle']):
+		str_query = str_query+ways.w['parcelle'][id].get_as_SQL_import_parcelle()
 		if idx%100 == 0:
 			cur_parcelles.execute(str_query+"COMMIT;")
 			str_query = ""
@@ -570,33 +555,28 @@ def main(args):
 		for t in asso.iter('tag'):
 			if t.get('k') == 'name':
 				for n in asso.iter('member'):
-					dict_node_relations[n.get('ref')] = normalize(t.get('v'))
+					if not n.get('ref') in dict_node_relations:
+						dict_node_relations[n.get('ref')] = []
+					dict_node_relations[n.get('ref')] = dict_node_relations[n.get('ref')]+[normalize(t.get('v'))]
 			dicts.add_voie('cadastre',t.get('v'))
 
 	load_nodes_from_xml_parse(xmladresses)
 	for n in xmladresses.iter('node'):
+		dtags = get_tags(n)
 		n_id = n.get('id')
 		nodes.n[n_id].modified = True
 		if 'addr:housenumber' in nodes.n[n_id].tags and n_id in dict_node_relations:
-			ad = Adresse(nodes.n[n_id],nodes.n[n_id].tags['addr:housenumber'],dict_node_relations[n_id])
-			adresses.add_adresse(ad)
+			for v in dict_node_relations[n_id]:
+				ad = Adresse(nodes.n[n_id],dtags['addr:housenumber'],v)
+				adresses.add_adresse(ad)
 				
 	print('chargement...')
 	cur_adresses = pgc.cursor()
-	str_query = '''DROP TABLE IF EXISTS tmp_adresses_'''+code_insee+''' CASCADE;
-					CREATE TABLE tmp_adresses_'''+code_insee+'''
-					(geometrie geometry,
-					id_adresse double precision,
-					numero character varying(50),
-					voie character varying (250));
-					COMMIT;'''
-	cur_adresses.execute(str_query)
-
 	str_query = ""
 	for idx,voie in enumerate(adresses.a):
 		for num in adresses.a[voie]['numeros']:
 			ad = adresses.a[voie]['numeros'][num]
-			str_query = str_query+'''INSERT INTO tmp_adresses_'''+code_insee+''' 
+			str_query = str_query+'''INSERT INTO adresses_'''+code_insee+''' 
 							(SELECT ST_Transform('''+ad.node.get_geom_as_text()+''',
 							2154),'''+str(ad.node.id)+''',\''''+num+'''\',\''''+voie+'''\');'''
 
@@ -631,15 +611,7 @@ def main(args):
 				dict_ways_osm[name_norm]['ids'].append(w.get('id'))
 
 	print('Traitements PostGIS...')
-	fnsql = 'adresses_buildings.sql'
-	fsql = open(fnsql,'rb')
-	str_query = fsql.read()
-	fsql.close()
-
-	str_query = str_query.replace('__com__','_'+code_insee)
-
-	cur_sql = pgc.cursor()
-	cur_sql.execute(str_query+'COMMIT;')
+	executeSQL_INSEE('adresses_buildings.sql',code_insee)
 
 	if tierce == '1':
 		print('Report des adresses sur les buildings en tant que nouveaux points...')
@@ -698,7 +670,7 @@ def main(args):
 	nb_voies_osm = 0
 
 	print('Fichiers associatedStreet...')
-	for v in adresses.a:	
+	for v in adresses.a:
 		fout = open(dirout+'/'+code_cadastre+'_'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
 		fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 		fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
@@ -740,7 +712,6 @@ def main(args):
 		for num in adresses.a[v]['numeros']:
 			numadresse = adresses.a[v]['numeros'][num]
 			for eb in (numadresse.addr_as_building_way + numadresse.building_for_addr_node):
-	#			fout.write(get_as_osm_xml_way(ways.w['building'][eb].geom.a_nodes,ways.w['building'][eb].tags,ways.w['building'][eb].attrib,ways.w['building'][eb].modified))
 				fout.write(ways.w['building'][eb].get_as_osm_xml_way())
 	# en prevision des autres fichiers, raz du statut "envoye" des nodes
 				for ebn in ways.w['building'][eb].geom.a_nodes:
@@ -748,7 +719,6 @@ def main(args):
 
 	##	batiments complementaires
 		for eb in adresses.a[v]['batiments_complementaires']:
-	#		fout.write(get_as_osm_xml_way(ways.w['building'][eb].geom.a_nodes,ways.w['building'][eb].tags,ways.w['building'][eb].attrib,ways.w['building'][eb].modified))
 			fout.write((ways.w['building'][eb]).get_as_osm_xml_way())
 	# en prevision des autres fichiers, raz du statut "envoye" des nodes
 			for ebn in ways.w['building'][eb].geom.a_nodes:
@@ -767,9 +737,11 @@ def main(args):
 			numadresse = adresses.a[v]['numeros'][num]
 			if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
 				fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
+				nodes.n[numadresse.node.id].sent = False
 			else:
 				for eb in numadresse.addr_as_node_on_building:
 					fout.write("\t\t<member type=\"node\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
+					nodes.n[eb].sent = False
 				for eb in numadresse.addr_as_building_way:
 					fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
 					
