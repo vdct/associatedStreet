@@ -38,7 +38,7 @@ SELECT 	b.*,1 etape
 FROM	building_parcelle__com__ b
 WHERE	ST_Area(b.geometrie) > 25 AND
 		b.wall != 'no';
---2 batiments legers de + de 15m2 au sol
+--2 batiments en dur de + de 15m2 au sol
 INSERT INTO batiments_possibles__com__
 SELECT 	b.*,2 etape
 FROM	building_parcelle__com__ b
@@ -122,20 +122,24 @@ FROM	buildings_complementaires__com__);
 
 -- rabbatement des points Adresse
 --- Impossible de rabattre sur un batiment hors parcelle mono adresse
+ALTER TABLE building_segments__com__ ADD COLUMN etape INTEGER;
 UPDATE 	building_segments__com__
-SET 	eligible = 0
+SET 	eligible = 0,
+		etape = 1
 WHERE 	id_building IN (SELECT id_building
 						FROM	buildings_complementaires__com__);
---- Impossible de rabattre sur un batiment hors parcelle mono adresse
+--- Impossible de rabattre sur un batiment hors parcelle
 UPDATE 	building_segments__com__
-SET 	eligible = 0
+SET 	eligible = 0,
+		etape = 2
 WHERE 	id_building IN (SELECT id_building
 						FROM	buildings_hors_voies__com__) AND
 		eligible = 1;
 						
---- Impossible de rabattre sur un segment mitoyen
+--- Impossible de rabattre sur un segment mitoyen (building)
 UPDATE	building_segments__com__
-SET		eligible = 0
+SET		eligible = 0,
+		etape = 3
 WHERE	id_node1||'-'||id_node2 IN (SELECT nd
 									FROM	(SELECT id_node1||'-'||id_node2 nd
 											FROM	building_segments__com__
@@ -146,9 +150,23 @@ WHERE	id_node1||'-'||id_node2 IN (SELECT nd
 									HAVING count(*) > 1) AND
 		eligible = 1;
 
---- Priorite aux segments de + de 2m
+--- Impossible de rabattre sur un segment mitoyen (parcelle)
+UPDATE	building_segments__com__
+SET		eligible = 0,
+		etape = 4
+WHERE	id_node1||'-'||id_node2 IN (SELECT 	b.id_node1||'-'||b.id_node2 nd
+									FROM	building_segments__com__ b
+									JOIN	parcelles_union_buffer__com__ p
+									ON		ST_Contains(p.geometrie,b.geometrie)
+									WHERE	b.eligible = 1
+									GROUP BY 1
+									HAVING COUNT(*) > 1) AND
+		eligible = 1;
+	
+--- Priorite aux segments de + de 2m quand ils existent parmi les eligibles
 UPDATE 	building_segments__com__
-SET 	eligible = 0
+SET 	eligible = 0,
+		etape = 5
 WHERE 	ST_Length(geometrie) < 2 AND
 		eligible = 1 AND
 		id_building IN (SELECT id_building
@@ -169,6 +187,9 @@ FROM	building_segments__com__
 WHERE	eligible = 1;
 
 -- Detection des grandes facades
+-- uniquement pour les batiments dont le cercle englobant est inscrit dans la parcelle de l'adresse
+-- pour limiter aux batiments des residences contrairement à ceux avec façade sur rue
+-- dont l'axe est perpendiculaire à la rue
 DROP TABLE IF EXISTS buildings_mitoyens__com__ CASCADE;
 CREATE TABLE buildings_mitoyens__com__
 AS
@@ -194,6 +215,7 @@ ON n.id_node1 = b.id_node2;
 
 DROP TABLE IF EXISTS mbc__com__ CASCADE;
 CREATE TABLE mbc__com__
+WITH (OIDS=TRUE)
 AS
 SELECT ST_MinimumBoundingCircle(geometrie,4) geometrie_cercle,
 		ST_Area(geometrie)::integer surface_building,
@@ -204,10 +226,18 @@ FROM 	building_mono_parcelle__com__ b
 LEFT OUTER JOIN buildings_mitoyens__com__ m
 ON		b.id_building = m.id_building AND
 		m.id_building IS NULL;
-		
+
+DELETE FROM mbc__com__
+WHERE oid NOT IN	(SELECT mbc.oid
+					FROM 	mbc__com__ mbc
+					JOIN	parcelles_union_buffer__com__ p
+					ON		ST_Contains(p.geometrie,mbc.geometrie_cercle));
+					
 UPDATE mbc__com__
 SET surface_cercle = ST_Area(geometrie_cercle);
 
+-- Pour les grandes facades, on retient comme possible point d'accroche
+-- les 2 plus proches du centroide de l'objet
 DELETE FROM centres_segments__com__
 WHERE oid IN (SELECT oid
 			FROM	(SELECT c.oid,rank() over(partition by c.id_building order by ST_Distance(c.geometrie,m.geometrie_centroid))rang
@@ -217,8 +247,6 @@ WHERE oid IN (SELECT oid
 					WHERE m.surface_cercle > 3 * surface_building)s
 			WHERE rang > 2);
 
--- Pour les grandes facades, on retient comme possible point d'accroche
--- les 2 plus proches du centroide de l'objet
 
 DROP TABLE IF EXISTS points_adresse_sur_building__com__ CASCADE;
 CREATE TABLE points_adresse_sur_building__com__
@@ -240,4 +268,13 @@ FROM
 			ab.voie = a.voie)a
 WHERE a.rang = 1;
 
+-- ajout des non elus de la voie dans les complementaires
+INSERT INTO buildings_complementaires__com__
+SELECT id_building,
+		voie
+FROM	adresse_sur_buildings__com__
+EXCEPT
+SELECT id_building,
+		voie
+FROM	points_adresse_sur_building__com__
 COMMIT;

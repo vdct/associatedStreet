@@ -340,7 +340,7 @@ class Way:
 		for a in self.addrs:
 			str_query = str_query+'''INSERT INTO parcelles_'''+code_insee+''' 
 							(SELECT ST_Transform(ST_SetSRID(ST_MakePolygon(ST_GeomFromText('''+(self.geom.get_geom_as_linestring_text())+''')),4326),2154),
-							'''+self.attrib['id']+''',\''''+self.addrs[a]['addr:housenumber']+'''\',\''''+self.addrs[a]['addr:street']+'''\');'''
+							'''+self.attrib['id']+''',\''''+self.addrs[a]['addr:housenumber']+'''\',\''''+normalize(self.addrs[a]['addr:street'])+'''\');'''
 		return str_query
 class Ways:
 	def __init__(self):
@@ -558,7 +558,7 @@ def main(args):
 					if not n.get('ref') in dict_node_relations:
 						dict_node_relations[n.get('ref')] = []
 					dict_node_relations[n.get('ref')] = dict_node_relations[n.get('ref')]+[normalize(t.get('v'))]
-			dicts.add_voie('cadastre',t.get('v'))
+			dicts.add_voie('adresse',t.get('v'))
 
 	load_nodes_from_xml_parse(xmladresses)
 	for n in xmladresses.iter('node'):
@@ -650,7 +650,11 @@ def main(args):
 	cur_addr_building_comp = pgc.cursor()
 	str_query = '''SELECT id_building::integer,
 							voie
-					FROM buildings_complementaires_'''+code_insee+''';'''
+					FROM buildings_complementaires_'''+code_insee+'''
+					EXCEPT
+					SELECT id_building::integer,
+							voie
+					FROM adresse_sur_buildings_'''+code_insee+''';'''
 	cur_addr_building_comp.execute(str_query)
 
 	for c in cur_addr_building_comp:
@@ -745,21 +749,21 @@ def main(args):
 				for eb in numadresse.addr_as_building_way:
 					fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
 					
-		street_name = dicts.noms_voies[v]['cadastre'].title()
+		street_name = dicts.noms_voies[v]['adresse'].title()
 		if 'OSM' in dicts.noms_voies[v]:
 			street_name =  dicts.noms_voies[v]['OSM'].encode('utf8')
 			for m in dict_ways_osm[v]['ids']:
 				fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
 			nb_voies_osm += 1
 		else:
-			ftmpkeys.write('Pas OSM     : '+dicts.noms_voies[v]['cadastre']+'\n')
+			ftmpkeys.write('Pas OSM     : '+dicts.noms_voies[v]['adresse']+'\n')
 		fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
 		fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
 		if v in dicts.fantoir:
 			fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dicts.fantoir[v]+"\"/>\n")
 			nb_voies_fantoir += 1
 		else:
-			ftmpkeys.write('Pas FANTOIR : '+dicts.noms_voies[v]['cadastre']+'\n')
+			ftmpkeys.write('Pas FANTOIR : '+dicts.noms_voies[v]['adresse']+'\n')
 		fout.write("	</relation>\n")
 		nb_voies_total +=1
 		fout.write("</osm>")
@@ -779,7 +783,6 @@ def main(args):
 	fin_total = time.time()
 
 	print('Execution en '+str(int(fin_total - debut_total))+' s.')
-
 	# mode 1 : addr:housenumber comme tag du building
 	#			sinon point adresse seul à la place fournie en entree
 	# mode 2 : addr:housenumber comme point à mi-longueur du plus proche coté du point initial
