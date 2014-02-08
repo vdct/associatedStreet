@@ -15,9 +15,9 @@ SELECT ST_Buffer(geometrie,1,'quad_segs=2') AS geometrie,
 		voie
 FROM	parcelles_union__com__;
 
-CREATE INDEX gidx_building__com__ 
-ON building__com__
-USING GIST(geometrie);
+CREATE INDEX 	gidx_building__com__ 
+ON 				building__com__
+USING 			GIST(geometrie);
 
 DROP TABLE IF EXISTS building_parcelle__com__ CASCADE;
 CREATE TABLE building_parcelle__com__
@@ -121,6 +121,10 @@ SELECT id_building
 FROM	buildings_complementaires__com__);
 
 -- rabbatement des points Adresse
+CREATE INDEX	gidx_building_segments__com__
+ON 				building_segments__com__
+USING			GIST(geometrie);
+
 --- Impossible de rabattre sur un batiment hors parcelle mono adresse
 ALTER TABLE building_segments__com__ ADD COLUMN etape INTEGER;
 UPDATE 	building_segments__com__
@@ -227,8 +231,14 @@ LEFT OUTER JOIN buildings_mitoyens__com__ m
 ON		b.id_building = m.id_building AND
 		m.id_building IS NULL;
 
-DELETE FROM mbc__com__
-WHERE oid NOT IN	(SELECT mbc.oid
+
+CREATE INDEX 	gidx_mbc__com__
+ON 				mbc__com__
+USING GIST(geometrie_cercle);
+
+DELETE
+FROM 	mbc__com__
+WHERE 	oid NOT IN	(SELECT mbc.oid
 					FROM 	mbc__com__ mbc
 					JOIN	parcelles_union_buffer__com__ p
 					ON		ST_Contains(p.geometrie,mbc.geometrie_cercle));

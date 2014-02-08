@@ -667,6 +667,7 @@ def main(args):
 	for v in sorted(dict_ways_osm):
 		ftmpkeys.write(v.encode('utf8')+' ('+dict_ways_osm[v]['name'].encode('utf8')+')\n')
 	ftmpkeys.write('---------------------\n')
+	ftmpkeys.write('-- Voies du cadastre non retrouvées ailleurs :\n')
 
 	# compteurs pour le bilan
 	nb_voies_total = 0
@@ -756,14 +757,14 @@ def main(args):
 				fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
 			nb_voies_osm += 1
 		else:
-			ftmpkeys.write('Pas OSM     : '+dicts.noms_voies[v]['adresse']+'\n')
+			ftmpkeys.write('voie absente dans OSM     	 : '+dicts.noms_voies[v]['adresse']+'\n')
 		fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
 		fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
 		if v in dicts.fantoir:
 			fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dicts.fantoir[v]+"\"/>\n")
 			nb_voies_fantoir += 1
 		else:
-			ftmpkeys.write('Pas FANTOIR : '+dicts.noms_voies[v]['adresse']+'\n')
+			ftmpkeys.write('voie absente dans le FANTOIR : '+dicts.noms_voies[v]['adresse']+'\n')
 		fout.write("	</relation>\n")
 		nb_voies_total +=1
 		fout.write("</osm>")
