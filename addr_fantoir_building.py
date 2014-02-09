@@ -432,6 +432,23 @@ def download_ways_from_overpass(way_type,target_file_name):
 		print('\n******* récupération des '+way_type+' KO ********')
 		print('Abandon')
 		os._exit(0)
+def download_vector_from_cadastre(code_insee,code_cadastre,fn,suffixe):
+	str_dept = '0'+code_insee[0:2]
+	if code_insee[0:2] == '97':
+		str_dept = code_insee[0:3]
+	d_url = 'http://37.187.60.59/cadastre-housenumber/data/'+str_dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
+	print('telechargement des '+suffixe)
+	print(d_url)
+	try:
+		resp = urllib2.urlopen(d_url)
+		target_file = open(fn,'wb')
+		target_file.write(resp.read())
+		target_file.close()
+		print("ok")
+	except urllib2.HTTPError:
+		print('\n******* récupération des '+suffixe+' KO ********')
+		print('Abandon')
+		os._exit(0)
 def	executeSQL_INSEE(fnsql,code_insee):
 	fsql = open(fnsql,'rb')
 	str_query = fsql.read()
@@ -468,6 +485,11 @@ def main(args):
 	rep_parcelles_adresses = 'parcelles_adresses'
 	fnparcelles = rep_parcelles_adresses+'/'+code_cadastre+'-parcelles.osm'
 	fnadresses = rep_parcelles_adresses+'/'+code_cadastre+'-adresses.osm'
+	if not os.path.exists(fnparcelles):
+		download_vector_from_cadastre(code_insee,code_cadastre,fnparcelles,'parcelles')
+	if not os.path.exists(fnadresses):
+		download_vector_from_cadastre(code_insee,code_cadastre,fnadresses,'adresses')
+		
 	root_dir_out = 'osm_output'
 	if not os.path.exists(root_dir_out):
 		os.mkdir(root_dir_out)
