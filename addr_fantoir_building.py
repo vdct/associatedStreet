@@ -1,8 +1,13 @@
+#!/usr/bin/env python
 # coding: UTF-8
 import psycopg2
 from pg_connexion import get_pgc
 import urllib,urllib2
-import sys,os,gc,time
+import sys
+import os,os.path
+import gc
+import time 
+import socket
 import xml.etree.ElementTree as ET
 
 debut_total = time.time()
@@ -417,36 +422,24 @@ def get_tags(xmlo):
 	for tg in xmlo.iter('tag'):
 		dtags[tg.get('k')] = tg.get('v')
 	return dtags
-def download_ways_from_overpass(way_type,target_file_name):
+def download_ways_from_overpass(way_type,fn):
 	d_url = urllib.quote('http://oapi-fr.openstreetmap.fr/oapi/interpreter?data=node(area:'+str(3600000000+dicts.osm_insee[code_insee])+');way(bn);(way._["'+way_type+'"];node(w););out meta;',':/?=')
 	d_url = d_url.replace('way._','way%2E%5F').replace('area:','area%3A')
 #node(area:3600076381);rel(bn);(relation._["type"="associatedStreet"];);(._;>;);out meta;;
-	print('telechargement des '+way_type+' OSM...')
-	try:
-		resp = urllib2.urlopen(d_url)
-		target_file = open(target_file_name,'wb')
-		target_file.write(resp.read())
-		target_file.close()
-		print("ok")
-	except urllib2.HTTPError:
-		print('\n******* récupération des '+way_type+' KO ********')
-		print('Abandon')
-		os._exit(0)
+	download_data(d_url,fn)
 def download_vector_from_cadastre(code_insee,code_cadastre,fn,suffixe):
-	str_dept = '0'+code_insee[0:2]
-	if code_insee[0:2] == '97':
-		str_dept = code_insee[0:3]
-	d_url = 'http://37.187.60.59/cadastre-housenumber/data/'+str_dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
-	print('telechargement des '+suffixe)
-	print(d_url)
+	d_url = 'http://cadastre.openstreetmap.fr/adresses/cadastre-housenumber/data/'+dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
+	download_data(d_url,fn)
+def download_data(st_url,fn):
+	print(u'téléchargement depuis '+urllib.unquote(st_url))
 	try:
-		resp = urllib2.urlopen(d_url)
+		resp = urllib2.urlopen(st_url)
 		target_file = open(fn,'wb')
 		target_file.write(resp.read())
 		target_file.close()
 		print("ok")
 	except urllib2.HTTPError:
-		print('\n******* récupération des '+suffixe+' KO ********')
+		print(u'\n******* récupération KO ********')
 		print('Abandon')
 		os._exit(0)
 def	executeSQL_INSEE(fnsql,code_insee):
@@ -465,9 +458,12 @@ def main(args):
 		print('2 : adresses comme tags des ways building')
 		os._exit(0)
 		
-	global code_insee,code_cadastre
+	global code_insee,code_cadastre,dept
 	code_insee = args[1]
 	code_cadastre = args[2]
+	dept = '0'+code_insee[0:2]
+	if code_insee[0:2] == '97':
+		dept = code_insee[0:3]
 	global dicts
 	dicts = Dicts()
 	dicts.load_all(code_insee)
@@ -483,6 +479,13 @@ def main(args):
 		nom_ville = normalize(nom_ville).replace(' ','_')
 
 	rep_parcelles_adresses = 'parcelles_adresses'
+	rep_parcelles_adresses = 'parcelles_adresses'
+	if socket.gethostname() == 'osm104':
+		rep_parcelles_adresses = 'data/'+dept+'/'+code_cadastre
+	else:
+		if not os.path.exists(rep_parcelles_adresses):
+			os.mkdir(rep_parcelles_adresses)
+
 	fnparcelles = rep_parcelles_adresses+'/'+code_cadastre+'-parcelles.osm'
 	fnadresses = rep_parcelles_adresses+'/'+code_cadastre+'-adresses.osm'
 	if not os.path.exists(fnparcelles):
