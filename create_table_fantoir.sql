@@ -2,6 +2,7 @@ DROP TABLE IF EXISTS 	fantoir_voie	CASCADE;
 CREATE TABLE fantoir_voie (	code_dept		character(2),
 							code_dir		character(1),
 							code_com		character(3),
+							code_insee		character(5),
 							id_voie			character(4),
 							cle_rivoli		character(1),
 							nature_voie		character(4),
@@ -21,3 +22,5 @@ CREATE TABLE fantoir_voie (	code_dept		character(2),
 							dernier_mot		character varying(8));
 CREATE INDEX idx_fantoir_voie_dept
 ON				fantoir_voie(code_dept);
+CREATE INDEX idx_fantoir_code_insee
+ON				fantoir_voie(code_insee);
