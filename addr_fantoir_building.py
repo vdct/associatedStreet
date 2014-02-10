@@ -32,6 +32,19 @@ class Dicts:
 						'O':[u'Ö',u'Ô'],
 						'U':[u'Û',u'Ü']}
 	def load_fantoir(self,insee):
+		str_query = '''	SELECT 	code_insee||id_voie||cle_rivoli,
+								nature_voie||' '||libelle_voie
+						FROM	fantoir_voie
+						WHERE	code_insee = \''''+insee+'''\' AND
+								caractere_annul NOT IN ('O','Q');'''
+		cur_fantoir = pgc.cursor()
+		cur_fantoir.execute(str_query)
+		for c in cur_fantoir:
+			cle = ' '.join(c[1].replace('-',' ').split())
+			cle = normalize(cle)
+			self.fantoir[cle] = c[0]
+			self.add_voie('fantoir',cle)
+	def load_fantoir_text(self,insee):
 		fndep = 'fantoir/'+insee[0:2]+'0.txt'
 		if not os.path.exists(fndep):
 			print('Fichier FANTOIR "'+fndep+'" absent du répertoire')
@@ -457,7 +470,9 @@ def main(args):
 		print('1 : adresses comme points sur les bâtiments')
 		print('2 : adresses comme tags des ways building')
 		os._exit(0)
-		
+	global pgc
+	pgc = get_pgc()
+	
 	global code_insee,code_cadastre,dept
 	code_insee = args[1]
 	code_cadastre = args[2]
@@ -467,8 +482,6 @@ def main(args):
 	global dicts
 	dicts = Dicts()
 	dicts.load_all(code_insee)
-	global pgc
-	pgc = get_pgc()
 	
 	tierce = args[3]
 	if str(tierce) not in ['1','2']:
