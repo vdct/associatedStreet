@@ -496,6 +496,7 @@ def main(args):
 	root_dir_out = 'osm_output'
 	if socket.gethostname() == 'osm104':
 		rep_parcelles_adresses = 'data/'+code_dept+'/'+code_cadastre
+		root_dir_out = rep_parcelles_adresses
 	else:
 		if not os.path.exists(rep_parcelles_adresses):
 			os.mkdir(rep_parcelles_adresses)
