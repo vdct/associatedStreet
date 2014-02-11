@@ -126,14 +126,17 @@ class Dicts:
 									'II'   :'DEUX',
 									'I'    :'UN'}
 	def load_abrev_type_voie(self):
-		fn = 'abrev_type_voie.txt'
+		fn = os.path.join(os.path.dirname(__file__), 'abrev_type_voie.txt')
+		#fn = 'abrev_type_voie.txt'
 		f = open(fn)
 		for l in f:
 			c = (l.splitlines()[0]).split('\t')
 			self.abrev_type_voie[c[0]] = c[1]
 		f.close()
 	def load_osm_insee(self):
-		finsee = open('osm_id_ref_insee.csv','r')
+		finsee_path = os.path.join(os.path.dirname(__file__),'osm_id_ref_insee.csv')
+		finsee = open(finsee_path,'r')
+#		finsee = open('osm_id_ref_insee.csv','r')
 		for e in finsee:
 			c = (e.splitlines()[0]).split(',')
 			self.osm_insee[str(c[1])] = int(c[0])
