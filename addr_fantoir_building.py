@@ -441,7 +441,7 @@ def download_ways_from_overpass(way_type,fn):
 #node(area:3600076381);rel(bn);(relation._["type"="associatedStreet"];);(._;>;);out meta;;
 	download_data(d_url,fn)
 def download_vector_from_cadastre(code_insee,code_cadastre,fn,suffixe):
-	d_url = 'http://cadastre.openstreetmap.fr/adresses/cadastre-housenumber/data/'+dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
+	d_url = 'http://cadastre.openstreetmap.fr/adresses/cadastre-housenumber/data/'+code_dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
 	download_data(d_url,fn)
 def download_data(st_url,fn):
 	print(u'téléchargement depuis '+urllib.unquote(st_url))
@@ -473,12 +473,12 @@ def main(args):
 	global pgc
 	pgc = get_pgc()
 	
-	global code_insee,code_cadastre,dept
+	global code_insee,code_cadastre,code_dept
 	code_insee = args[1]
 	code_cadastre = args[2]
-	dept = '0'+code_insee[0:2]
+	code_dept = '0'+code_insee[0:2]
 	if code_insee[0:2] == '97':
-		dept = code_insee[0:3]
+		code_dept = code_insee[0:3]
 	global dicts
 	dicts = Dicts()
 	dicts.load_all(code_insee)
@@ -493,11 +493,17 @@ def main(args):
 
 	rep_parcelles_adresses = 'parcelles_adresses'
 	rep_parcelles_adresses = 'parcelles_adresses'
+	root_dir_out = 'osm_output'
 	if socket.gethostname() == 'osm104':
-		rep_parcelles_adresses = 'data/'+dept+'/'+code_cadastre
+		rep_parcelles_adresses = 'data/'+code_dept+'/'+code_cadastre
 	else:
 		if not os.path.exists(rep_parcelles_adresses):
 			os.mkdir(rep_parcelles_adresses)
+		if not os.path.exists(root_dir_out):
+			os.mkdir(root_dir_out)
+	dirout = root_dir_out+'/'+'_'.join([code_cadastre,'adresses',nom_ville,code_dept,'style',tierce])
+	if not os.path.exists(dirout):
+		os.mkdir(dirout)
 
 	fnparcelles = rep_parcelles_adresses+'/'+code_cadastre+'-parcelles.osm'
 	fnadresses = rep_parcelles_adresses+'/'+code_cadastre+'-adresses.osm'
@@ -505,13 +511,6 @@ def main(args):
 		download_vector_from_cadastre(code_insee,code_cadastre,fnparcelles,'parcelles')
 	if not os.path.exists(fnadresses):
 		download_vector_from_cadastre(code_insee,code_cadastre,fnadresses,'adresses')
-		
-	root_dir_out = 'osm_output'
-	if not os.path.exists(root_dir_out):
-		os.mkdir(root_dir_out)
-	dirout = root_dir_out+'/'+'_'.join(['adresses',nom_ville,code_insee[0:2],code_cadastre,'style',tierce])
-	if not os.path.exists(dirout):
-		os.mkdir(dirout)
 		
 	building_rep = 'cache_buildings'
 	if not os.path.exists(building_rep):
