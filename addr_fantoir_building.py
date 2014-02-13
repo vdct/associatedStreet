@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 # coding: UTF-8
+import copy
+import glob
+import gc
+import urllib,urllib2
+import sys,shutil
+import os,os.path
 import psycopg2
 from pg_connexion import get_pgc
-import urllib,urllib2
-import sys
-import os,os.path
-import gc
-import time 
 import socket
+import time 
 import xml.etree.ElementTree as ET
+import zipfile
 
 debut_total = time.time()
 
@@ -24,6 +27,8 @@ class Dicts:
 		self.mot_a_blanc = []
 		self.abrev_titres = {}
 		self.noms_voies = {}
+		self.ways_osm = {}
+
 	def load_lettre_a_lettre(self):
 		self.lettre_a_lettre = {'A':[u'Â',u'À'],
 						'C':[u'Ç'],
@@ -370,14 +375,6 @@ class Ways:
 				'parcelle':{}}
 	def add_way(self,w,id,osm_key):
 		self.w[osm_key][id] = w
-class Parcelles:
-	def __init__(self):
-		self.p = {}
-	def add_parcelle(self,p,id):
-		if id in self.p:
-			self.p[id]=self.p[id]+[p]
-		else:
-			self.p[id]=[p]
 class Adresse:
 	def __init__(self,node,num,voie):
 		self.node = node
@@ -466,10 +463,144 @@ def	executeSQL_INSEE(fnsql,code_insee):
 	cur_sql = pgc.cursor()
 	cur_sql.execute(str_query)
 	cur_sql.close()
+def	write_output(nodes,ways,adresses,libelle):
+	dirout = root_dir_out+'/'+'_'.join([code_cadastre,libelle])
+	if not os.path.exists(dirout):
+		os.mkdir(dirout)
+	print(u'Résultats en mode '+' '.join(libelle.split('_')))
+	print('Fichier rapport...')
+	fntmpkeys = dirout+'/_rapport.txt'
+	ftmpkeys = open(fntmpkeys,'w')
+	ftmpkeys.write('--noms de voies OSM normalisés (noms en base OSM)--\n')
+	for v in sorted(dicts.ways_osm):
+		ftmpkeys.write(v.encode('utf8')+' ('+dicts.ways_osm[v]['name'].encode('utf8')+')\n')
+	ftmpkeys.write('---------------------\n')
+	ftmpkeys.write('-- Voies du cadastre non retrouvées ailleurs :\n')
+
+	# compteurs pour le bilan
+	nb_voies_total = 0
+	nb_voies_fantoir = 0
+	nb_voies_osm = 0
+
+	zipfilename = dirout+'.zip'
+	zip_output = zipfile.ZipFile(zipfilename,"w", zipfile.ZIP_DEFLATED)
 	
+	print('Fichiers associatedStreet...')
+	for v in adresses.a:
+		fout = open(dirout+'/'+code_cadastre+'_'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
+		fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+		fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
+	# nodes
+		for num in adresses.a[v]['numeros']:
+			numadresse = adresses.a[v]['numeros'][num]
+	## 	point adresse isole
+			if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
+				if not numadresse.node.sent:
+					fout.write(numadresse.node.get_as_osm_xml_node())
+					numadresse.node.sent = True
+	## 	point adresse reference par un batiment
+			for eb in numadresse.building_for_addr_node:
+				for ebn in ways.w['building'][eb].geom.a_nodes:
+					if not nodes.n[ebn].sent:
+						fout.write(nodes.n[ebn].get_as_osm_xml_node())
+						nodes.n[ebn].sent = True
+	##	nodes des batiments directement taggues en hsnr
+			for eb in numadresse.addr_as_building_way:
+				for ebn in ways.w['building'][eb].geom.a_nodes:
+					if not nodes.n[ebn].sent:
+						fout.write(nodes.n[ebn].get_as_osm_xml_node())
+						nodes.n[ebn].sent = True
+
+	##	nodes des batiments complementaires
+		for eb in adresses.a[v]['batiments_complementaires']:
+			for ebn in ways.w['building'][eb].geom.a_nodes:
+				if not nodes.n[ebn].sent:
+					fout.write(nodes.n[ebn].get_as_osm_xml_node())
+					nodes.n[ebn].sent = True
+	## nodes des highways
+		if 'OSM' in dicts.noms_voies[v]:
+			for w in dicts.ways_osm[v]['ids']:
+				for wn in ways.w['highway'][w].geom.a_nodes:
+					fout.write(nodes.n[wn].get_as_osm_xml_node())
+
+	# ways
+	## batiments porteurs d'une adresse
+		for num in adresses.a[v]['numeros']:
+			numadresse = adresses.a[v]['numeros'][num]
+			for eb in (numadresse.addr_as_building_way + numadresse.building_for_addr_node):
+				fout.write(ways.w['building'][eb].get_as_osm_xml_way())
+	# en prevision des autres fichiers, raz du statut "envoye" des nodes
+				for ebn in ways.w['building'][eb].geom.a_nodes:
+					nodes.n[ebn].sent = False
+
+	##	batiments complementaires
+		for eb in adresses.a[v]['batiments_complementaires']:
+			fout.write((ways.w['building'][eb]).get_as_osm_xml_way())
+	# en prevision des autres fichiers, raz du statut "envoye" des nodes
+			for ebn in ways.w['building'][eb].geom.a_nodes:
+				nodes.n[ebn].sent = False
+
+	## ways des highways
+		if 'OSM' in dicts.noms_voies[v]:
+			for w in dicts.ways_osm[v]['ids']:
+				fout.write((ways.w['highway'][w]).get_as_osm_xml_way())
+				for wn in ways.w['highway'][w].geom.a_nodes:
+					nodes.n[wn].sent = False
+
+	# relations	
+		fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
+		for num in adresses.a[v]['numeros']:
+			numadresse = adresses.a[v]['numeros'][num]
+			if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
+				fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
+				nodes.n[numadresse.node.id].sent = False
+			else:
+				for eb in numadresse.addr_as_node_on_building:
+					fout.write("\t\t<member type=\"node\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
+					nodes.n[eb].sent = False
+				for eb in numadresse.addr_as_building_way:
+					fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
+					
+		street_name = dicts.noms_voies[v]['adresse'].title()
+		if 'OSM' in dicts.noms_voies[v]:
+			street_name =  dicts.noms_voies[v]['OSM'].encode('utf8')
+			for m in dicts.ways_osm[v]['ids']:
+				fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
+			nb_voies_osm += 1
+		else:
+			ftmpkeys.write('voie absente dans OSM     	 : '+dicts.noms_voies[v]['adresse']+'\n')
+		fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
+		fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
+		if v in dicts.fantoir:
+			fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dicts.fantoir[v]+"\"/>\n")
+			nb_voies_fantoir += 1
+		else:
+			ftmpkeys.write('voie absente dans le FANTOIR : '+dicts.noms_voies[v]['adresse']+'\n')
+		fout.write("	</relation>\n")
+		nb_voies_total +=1
+		fout.write("</osm>")
+		fout.close()
+		
+	ftmpkeys.write(	"---------------- BILAN ----------------\n")
+	s = 			"Nombre de relations creees  : "+str(nb_voies_total)
+	print(s)
+	ftmpkeys.write(s+'\n')
+	s = "     avec code FANTOIR      : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)"
+	print(s)
+	ftmpkeys.write(s+'\n')
+	s = "     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm*100/nb_voies_total))+"%)"
+	print(s)
+	ftmpkeys.write(s+'\n')
+	ftmpkeys.close()
+
+	for fosm in glob.glob(dirout+'/*.osm'):
+		zip_output.write(fosm,os.path.basename(fosm))
+	zip_output.write(fntmpkeys,os.path.basename(fntmpkeys))
+	zip_output.close()
+	shutil.rmtree(dirout)
 def main(args):
-	if len(args) < 4:
-		print('USAGE : python addr_fantoir_building.py <code INSEE> <code Cadastre> <1|2> (nom de la commune)')
+	if len(args) < 2:
+		print('USAGE : python addr_fantoir_building.py <code INSEE> <code Cadastre>')
 		print('1 : adresses comme points sur les bâtiments')
 		print('2 : adresses comme tags des ways building')
 		os._exit(0)
@@ -486,16 +617,13 @@ def main(args):
 	dicts = Dicts()
 	dicts.load_all(code_insee)
 	
-	tierce = args[3]
-	if str(tierce) not in ['1','2']:
-		tierce = '1'
-	nom_ville = ''
-	if len(args) > 4:
-		nom_ville = ' '.join(args[4:])
-		nom_ville = normalize(nom_ville).replace(' ','_')
+	dict_objets_pour_output = {'1':{},'2':{}}
+	dict_objets_pour_output['1']['libelle_pour_fichiers'] = 'adresse_point_sur_batiment'
+	dict_objets_pour_output['2']['libelle_pour_fichiers'] = 'adresse_tag_sur_batiment'
 
 	rep_parcelles_adresses = 'parcelles_adresses'
 	rep_parcelles_adresses = 'parcelles_adresses'
+	global root_dir_out
 	root_dir_out = 'osm_output'
 	if socket.gethostname() == 'osm104':
 		rep_parcelles_adresses = 'data/'+code_dept+'/'+code_cadastre
@@ -505,9 +633,6 @@ def main(args):
 			os.mkdir(rep_parcelles_adresses)
 		if not os.path.exists(root_dir_out):
 			os.mkdir(root_dir_out)
-	dirout = root_dir_out+'/'+'_'.join([code_cadastre,'adresses',nom_ville,code_dept,'style',tierce])
-	if not os.path.exists(dirout):
-		os.mkdir(dirout)
 
 	fnparcelles = rep_parcelles_adresses+'/'+code_cadastre+'-parcelles.osm'
 	fnadresses = rep_parcelles_adresses+'/'+code_cadastre+'-adresses.osm'
@@ -523,7 +648,6 @@ def main(args):
 	global nodes,ways
 	nodes = Nodes()
 	ways = Ways()
-	parcelles = Parcelles()
 	adresses = Adresses()
 
 	fnbuilding = building_rep+'/buildings_'+code_insee+'.osm'
@@ -635,7 +759,6 @@ def main(args):
 		download_ways_from_overpass('highway',fnhighway)
 	
 	print('mise en cache des voies...')
-	dict_ways_osm = {}
 	xmlways = ET.parse(fnhighway)
 	load_nodes_from_xml_parse(xmlways)
 	load_ways_from_xml_parse(xmlways,'highway')
@@ -647,44 +770,55 @@ def main(args):
 				dicts.add_voie('OSM',name_osm)
 
 				name_norm = normalize(name_osm)
-				if name_norm not in dict_ways_osm:
-					dict_ways_osm[name_norm] = {'name':name_osm,'ids':[]}
-				dict_ways_osm[name_norm]['ids'].append(w.get('id'))
+				if name_norm not in dicts.ways_osm:
+					dicts.ways_osm[name_norm] = {'name':name_osm,'ids':[]}
+				dicts.ways_osm[name_norm]['ids'].append(w.get('id'))
 
 	print('Traitements PostGIS...')
 	executeSQL_INSEE('adresses_buildings.sql',code_insee)
 
-	if tierce == '1':
-		print('Report des adresses sur les buildings en tant que nouveaux points...')
-		cur_addr_node_building = pgc.cursor()
-		str_query = '''SELECT 	lon,
-								lat,
-								id_building::integer,
-								indice_node_1,
-								numero,
-								voie,
-								id_adresse::integer
-						FROM points_adresse_sur_building_'''+code_insee+''';'''
-		cur_addr_node_building.execute(str_query)
-		for c in cur_addr_node_building:
-			nodes.n[str(c[6])].move_to(c[0],c[1])
-			ways.w['building'][str(c[2])].insert_new_point(str(c[6]),c[3])
-			adresses.a[c[5]]['numeros'][c[4]].add_addr_as_node_on_building(str(c[6]))
-			adresses.a[c[5]]['numeros'][c[4]].add_building_for_addr_node(str(c[2]))
+# duplication des instances de nodes,ways,adresses car modifs differentes selon le style des adresses
+# 1 : adresses comme points rabattus sur les batiments
+# 2 : adresses comme tags sur les batiments
+
+	dict_objets_pour_output['1']['nodes']	= nodes
+	dict_objets_pour_output['1']['ways'] 	= ways
+	dict_objets_pour_output['1']['adresses']= adresses
+	dict_objets_pour_output['2']['nodes'] 	= copy.deepcopy(nodes)
+	dict_objets_pour_output['2']['ways'] 	= copy.deepcopy(ways)
+	dict_objets_pour_output['2']['adresses']= copy.deepcopy(adresses)
+	
+	# tierce == '1':
+	print('Report des adresses sur les buildings en tant que nouveaux points...')
+	cur_addr_node_building = pgc.cursor()
+	str_query = '''SELECT 	lon,
+							lat,
+							id_building::integer,
+							indice_node_1,
+							numero,
+							voie,
+							id_adresse::integer
+					FROM points_adresse_sur_building_'''+code_insee+''';'''
+	cur_addr_node_building.execute(str_query)
+	for c in cur_addr_node_building:
+		dict_objets_pour_output['1']['nodes'].n[str(c[6])].move_to(c[0],c[1])
+		dict_objets_pour_output['1']['ways'].w['building'][str(c[2])].insert_new_point(str(c[6]),c[3])
+		dict_objets_pour_output['1']['adresses'].a[c[5]]['numeros'][c[4]].add_addr_as_node_on_building(str(c[6]))
+		dict_objets_pour_output['1']['adresses'].a[c[5]]['numeros'][c[4]].add_building_for_addr_node(str(c[2]))
 		
-	if tierce == '2':
-		print('Report des adresses sur les buildings en tant que nouveau tag...')
-		# batiments modifies
-		cur_addr_way_building = pgc.cursor()
-		str_query = '''SELECT id_building::integer,
-								id_adresse::integer,
-								numero,
-								voie
-						FROM adresse_sur_buildings_'''+code_insee+''';'''
-		cur_addr_way_building.execute(str_query)
-		for c in cur_addr_way_building:
-			ways.w['building'][str(c[0])].add_tag('addr:housenumber',c[2])
-			adresses.a[c[3]]['numeros'][c[2]].add_addr_as_building(str(c[0]))
+	# tierce == '2':
+	print('Report des adresses sur les buildings en tant que nouveau tag...')
+	# batiments modifies
+	cur_addr_way_building = pgc.cursor()
+	str_query = '''SELECT id_building::integer,
+							id_adresse::integer,
+							numero,
+							voie
+					FROM adresse_sur_buildings_'''+code_insee+''';'''
+	cur_addr_way_building.execute(str_query)
+	for c in cur_addr_way_building:
+		dict_objets_pour_output['2']['ways'].w['building'][str(c[0])].add_tag('addr:housenumber',c[2])
+		dict_objets_pour_output['2']['adresses'].a[c[3]]['numeros'][c[2]].add_addr_as_building(str(c[0]))
 
 	print('Ajout des autres buildings de la voie...')
 	# autres batiments des parcelles de la voie
@@ -699,131 +833,13 @@ def main(args):
 	cur_addr_building_comp.execute(str_query)
 
 	for c in cur_addr_building_comp:
-		adresses.add_batiment_complementaire(c[1],str(c[0]))
+		for k in dict_objets_pour_output.viewkeys():
+			dict_objets_pour_output[k]['adresses'].add_batiment_complementaire(c[1],str(c[0]))
 
-	print('Fichier rapport...')
-	fntmpkeys = dirout+'/_rapport.txt'
-	ftmpkeys = open(fntmpkeys,'w')
-	ftmpkeys.write('--noms de voies OSM normalisés (noms en base OSM)--\n')
-	for v in sorted(dict_ways_osm):
-		ftmpkeys.write(v.encode('utf8')+' ('+dict_ways_osm[v]['name'].encode('utf8')+')\n')
-	ftmpkeys.write('---------------------\n')
-	ftmpkeys.write('-- Voies du cadastre non retrouvées ailleurs :\n')
+	for k in dict_objets_pour_output.viewkeys():
+		write_output(dict_objets_pour_output[k]['nodes'],dict_objets_pour_output[k]['ways'],dict_objets_pour_output[k]['adresses'],dict_objets_pour_output[k]['libelle_pour_fichiers'])
 
-	# compteurs pour le bilan
-	nb_voies_total = 0
-	nb_voies_fantoir = 0
-	nb_voies_osm = 0
-
-	print('Fichiers associatedStreet...')
-	for v in adresses.a:
-		fout = open(dirout+'/'+code_cadastre+'_'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
-		fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-		fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
-	# nodes
-		for num in adresses.a[v]['numeros']:
-			numadresse = adresses.a[v]['numeros'][num]
-	## 	point adresse isole
-			if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
-				if not numadresse.node.sent:
-					fout.write(numadresse.node.get_as_osm_xml_node())
-					numadresse.node.sent = True
-	## 	point adresse reference par un batiment
-			for eb in numadresse.building_for_addr_node:
-				for ebn in ways.w['building'][eb].geom.a_nodes:
-					if not nodes.n[ebn].sent:
-						fout.write(nodes.n[ebn].get_as_osm_xml_node())
-						nodes.n[ebn].sent = True
-	##	nodes des batiments directement taggues en hsnr
-			for eb in numadresse.addr_as_building_way:
-				for ebn in ways.w['building'][eb].geom.a_nodes:
-					if not nodes.n[ebn].sent:
-						fout.write(nodes.n[ebn].get_as_osm_xml_node())
-						nodes.n[ebn].sent = True
-
-	##	nodes des batiments complementaires
-		for eb in adresses.a[v]['batiments_complementaires']:
-			for ebn in ways.w['building'][eb].geom.a_nodes:
-				if not nodes.n[ebn].sent:
-					fout.write(nodes.n[ebn].get_as_osm_xml_node())
-					nodes.n[ebn].sent = True
-	## nodes des highways
-		if 'OSM' in dicts.noms_voies[v]:
-			for w in dict_ways_osm[v]['ids']:
-				for wn in ways.w['highway'][w].geom.a_nodes:
-					fout.write(nodes.n[wn].get_as_osm_xml_node())
-
-	# ways
-	## batiments porteurs d'une adresse
-		for num in adresses.a[v]['numeros']:
-			numadresse = adresses.a[v]['numeros'][num]
-			for eb in (numadresse.addr_as_building_way + numadresse.building_for_addr_node):
-				fout.write(ways.w['building'][eb].get_as_osm_xml_way())
-	# en prevision des autres fichiers, raz du statut "envoye" des nodes
-				for ebn in ways.w['building'][eb].geom.a_nodes:
-					nodes.n[ebn].sent = False
-
-	##	batiments complementaires
-		for eb in adresses.a[v]['batiments_complementaires']:
-			fout.write((ways.w['building'][eb]).get_as_osm_xml_way())
-	# en prevision des autres fichiers, raz du statut "envoye" des nodes
-			for ebn in ways.w['building'][eb].geom.a_nodes:
-				nodes.n[ebn].sent = False
-
-	## ways des highways
-		if 'OSM' in dicts.noms_voies[v]:
-			for w in dict_ways_osm[v]['ids']:
-				fout.write((ways.w['highway'][w]).get_as_osm_xml_way())
-				for wn in ways.w['highway'][w].geom.a_nodes:
-					nodes.n[wn].sent = False
-
-	# relations	
-		fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
-		for num in adresses.a[v]['numeros']:
-			numadresse = adresses.a[v]['numeros'][num]
-			if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
-				fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
-				nodes.n[numadresse.node.id].sent = False
-			else:
-				for eb in numadresse.addr_as_node_on_building:
-					fout.write("\t\t<member type=\"node\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
-					nodes.n[eb].sent = False
-				for eb in numadresse.addr_as_building_way:
-					fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
-					
-		street_name = dicts.noms_voies[v]['adresse'].title()
-		if 'OSM' in dicts.noms_voies[v]:
-			street_name =  dicts.noms_voies[v]['OSM'].encode('utf8')
-			for m in dict_ways_osm[v]['ids']:
-				fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
-			nb_voies_osm += 1
-		else:
-			ftmpkeys.write('voie absente dans OSM     	 : '+dicts.noms_voies[v]['adresse']+'\n')
-		fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
-		fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
-		if v in dicts.fantoir:
-			fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dicts.fantoir[v]+"\"/>\n")
-			nb_voies_fantoir += 1
-		else:
-			ftmpkeys.write('voie absente dans le FANTOIR : '+dicts.noms_voies[v]['adresse']+'\n')
-		fout.write("	</relation>\n")
-		nb_voies_total +=1
-		fout.write("</osm>")
-		fout.close()
-
-	ftmpkeys.write(	"---------------- BILAN ----------------\n")
-	s = 			"Nombre de relations creees  : "+str(nb_voies_total)
-	print(s)
-	ftmpkeys.write(s+'\n')
-	s = "     avec code FANTOIR      : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)"
-	print(s)
-	ftmpkeys.write(s+'\n')
-	s = "     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm*100/nb_voies_total))+"%)"
-	print(s)
-	ftmpkeys.write(s+'\n')
-	ftmpkeys.close()
 	fin_total = time.time()
-
 	print('Execution en '+str(int(fin_total - debut_total))+' s.')
 	# mode 1 : addr:housenumber comme tag du building
 	#			sinon point adresse seul à la place fournie en entree
