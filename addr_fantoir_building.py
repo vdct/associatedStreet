@@ -467,6 +467,7 @@ def	write_output(nodes,ways,adresses,libelle):
 	dirout = root_dir_out+'/'+'_'.join([code_cadastre,libelle])
 	if not os.path.exists(dirout):
 		os.mkdir(dirout)
+	print('#################################################')
 	print(u'Resultats en mode '+' '.join(libelle.split('_')))
 	print('Fichier rapport...')
 	fntmpkeys = dirout+'/_rapport.txt'
