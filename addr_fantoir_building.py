@@ -488,7 +488,10 @@ def	write_output(nodes,ways,adresses,libelle):
 	
 	print('Fichiers associatedStreet...')
 	for v in adresses.a:
-		fout = open(dirout+'/'+code_cadastre+'_'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
+		if not adresses.a[v]['numeros']:
+			continue
+#		fout = open(dirout+'/'+code_cadastre+'_'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
+		fout = open(dirout+'/'+code_cadastre+'_'+v.replace(' ','_')+'.osm','w')
 		fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 		fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
 	# nodes
@@ -577,7 +580,7 @@ def	write_output(nodes,ways,adresses,libelle):
 			fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dicts.fantoir[v]+"\"/>\n")
 			nb_voies_fantoir += 1
 		else:
-			ftmpkeys.write('voie absente dans le FANTOIR : '+dicts.noms_voies[v]['adresse']+'\n')
+			ftmpkeys.write('voie absente dans le FANTOIR : '+dicts.noms_voies[v]['adresse'].encode('utf8')+'\n')
 		fout.write("	</relation>\n")
 		nb_voies_total +=1
 		fout.write("</osm>")
