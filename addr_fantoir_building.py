@@ -444,7 +444,7 @@ def download_vector_from_cadastre(code_insee,code_cadastre,fn,suffixe):
 	d_url = 'http://cadastre.openstreetmap.fr/adresses/cadastre-housenumber/data/'+code_dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
 	download_data(d_url,fn)
 def download_data(st_url,fn):
-	print(u'téléchargement depuis '+urllib.unquote(st_url))
+	print(u'Telechargement depuis '+urllib.unquote(st_url))
 	try:
 		resp = urllib2.urlopen(st_url)
 		target_file = open(fn,'wb')
@@ -467,7 +467,7 @@ def	write_output(nodes,ways,adresses,libelle):
 	dirout = root_dir_out+'/'+'_'.join([code_cadastre,libelle])
 	if not os.path.exists(dirout):
 		os.mkdir(dirout)
-	print(u'Résultats en mode '+' '.join(libelle.split('_')))
+	print(u'Resultats en mode '+' '.join(libelle.split('_')))
 	print('Fichier rapport...')
 	fntmpkeys = dirout+'/_rapport.txt'
 	ftmpkeys = open(fntmpkeys,'w')
@@ -561,14 +561,15 @@ def	write_output(nodes,ways,adresses,libelle):
 				for eb in numadresse.addr_as_building_way:
 					fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
 					
-		street_name = dicts.noms_voies[v]['adresse'].title()
+		street_name = v.title()
 		if 'OSM' in dicts.noms_voies[v]:
 			street_name =  dicts.noms_voies[v]['OSM'].encode('utf8')
 			for m in dicts.ways_osm[v]['ids']:
 				fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
 			nb_voies_osm += 1
 		else:
-			ftmpkeys.write('voie absente dans OSM     	 : '+dicts.noms_voies[v]['adresse']+'\n')
+			ftmpkeys.write('voie absente dans OSM     	 : '+dicts.noms_voies[v]['adresse'].encode('utf8')+'\n')
+			street_name =  dicts.noms_voies[v]['adresse'].encode('utf8')
 		fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
 		fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
 		if v in dicts.fantoir:
