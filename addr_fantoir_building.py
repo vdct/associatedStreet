@@ -463,6 +463,17 @@ def	executeSQL_INSEE(fnsql,code_insee):
 	cur_sql = pgc.cursor()
 	cur_sql.execute(str_query)
 	cur_sql.close()
+def purge_pg_tables(code_insee):
+	str_query = '''SELECT	tablename
+					FROM 	pg_tables
+					WHERE	tablename like \'%'''+code_insee+'''\';'''
+	cur_sql = pgc.cursor()
+	cur_sql.execute(str_query)
+	str_del = ''
+	for c in cur_sql:
+		str_del = str_del+'DROP TABLE IF EXISTS '+c[0]+' CASCADE;'
+	cur_sql.execute(str_del)
+	cur_sql.close()
 def	write_output(nodes,ways,adresses,libelle):
 	dirout = root_dir_out+'/'+'_'.join([code_cadastre,libelle])
 	if not os.path.exists(dirout):
@@ -844,6 +855,9 @@ def main(args):
 	for k in dict_objets_pour_output.viewkeys():
 		write_output(dict_objets_pour_output[k]['nodes'],dict_objets_pour_output[k]['ways'],dict_objets_pour_output[k]['adresses'],dict_objets_pour_output[k]['libelle_pour_fichiers'])
 
+	# Menage en prod
+	if socket.gethostname() == 'osm104':
+		purge_pg_tables(code_insee)
 	fin_total = time.time()
 	print('Execution en '+str(int(fin_total - debut_total))+' s.')
 	# mode 1 : addr:housenumber comme tag du building
