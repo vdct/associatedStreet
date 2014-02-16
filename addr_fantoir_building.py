@@ -306,10 +306,10 @@ class Way:
 			self.wall = self.tags['wall']
 	def check_valid_building(self):
 		if len(self.geom.a_nodes) < 4:
-			print('batiment invalide (au mois 4 points) Voir http://www.osm.org/way/'+id)
+			print('*** batiment invalide (au moins 4 points) Voir http://www.osm.org/way/'+self.attrib['id'])
 			self.is_valid = False
 		if self.is_valid and self.geom.a_nodes[0] != self.geom.a_nodes[-1]:
-			print('batiment invalide (ouvert) Voir http://www.osm.org/way/'+id)
+			print('*** batiment invalide (ouvert) Voir http://www.osm.org/way/'+self.attrib['id'])
 			self.is_valid = False
 	def collect_adresses(self):
 		tmp_addrs = {}
@@ -403,24 +403,6 @@ class Adresses:
 		if not cle in self.a:
 			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
 		self.a[cle]['batiments_complementaires'] = self.a[cle]['batiments_complementaires'] + [b_id]
-# def get_as_osm_xml_way(node_list,tags,attrib,modified):
-	# s_modified = ""
-	# if modified:
-		# s_modified = "action=\"modify\" "
-	# s = "\t<way id=\""+attrib['id']+"\" "+s_modified
-	# for a in attrib:
-		# if a == 'id' or a == 'modify':
-			# continue
-# #		s = s+" "+a.encode('utf8')+"=\""+attrib[a].encode('utf8')+"\""
-		# s = s+" "+a.encode('utf8')+"=\""+XSS.quoteattr(attrib[a]).encode('utf8')+"\""
-	# s = s+">\n"
-	# for nl in node_list:
-		# s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
-	# for k in sorted(tags.viewkeys()):
-		# # s = s+"\t\t<tag k=\""+k+"\" v=\""+tags[k].encode('utf8')+"\"/>\n"
-		# s = s+"\t\t<tag k=\""+k+"\" v=\""+XSS.quoteattr(tags[k]).encode('utf8')+"\"/>\n"
-	# s = s+"\t</way>\n"
-	# return s
 def load_nodes_from_xml_parse(xmlp):
 	for n in xmlp.iter('node'):
 		dtags = get_tags(n)
@@ -439,7 +421,10 @@ def get_tags(xmlo):
 		dtags[tg.get('k')] = tg.get('v')
 	return dtags
 def download_ways_from_overpass(way_type,fn):
-	d_url = urllib.quote('http://oapi-fr.openstreetmap.fr/oapi/interpreter?data=node(area:'+str(3600000000+dicts.osm_insee[code_insee])+');way(bn);(way._["'+way_type+'"];node(w););out meta;',':/?=')
+	s_domaine = 'oapi-fr.openstreetmap.fr/oapi'
+	if code_dept[0:2] == '97':
+		s_domaine = 'overpass-api.de/api'
+	d_url = urllib.quote('http://'+s_domaine+'/interpreter?data=node(area:'+str(3600000000+dicts.osm_insee[code_insee])+');way(bn);(way._["'+way_type+'"];node(w););out meta;',':/?=')
 	d_url = d_url.replace('way._','way%2E%5F').replace('area:','area%3A')
 #node(area:3600076381);rel(bn);(relation._["type"="associatedStreet"];);(._;>;);out meta;;
 	download_data(d_url,fn)
