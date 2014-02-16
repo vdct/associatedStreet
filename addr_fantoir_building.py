@@ -11,6 +11,7 @@ from pg_connexion import get_pgc
 import socket
 import time 
 import xml.etree.ElementTree as ET
+import xml.sax.saxutils as XSS
 import zipfile
 
 debut_total = time.time()
@@ -247,7 +248,7 @@ class Node:
 		else:
 			s = s+">\n"
 			for k in sorted(self.tags.viewkeys()):
-				s = s+"\t\t<tag k=\""+k+"\" v=\""+self.tags[k].encode('utf8')+"\"/>\n"
+				s = s+"\t\t<tag k="+XSS.quoteattr(k)+" v="+XSS.quoteattr(self.tags[k]).encode('utf8')+"/>\n"
 			s = s+"\t</node>\n"
 		return s
 class Nodes:
@@ -339,12 +340,12 @@ class Way:
 		for a in self.attrib:
 			if a == 'id' or a == 'modify':
 				continue
-			s = s+" "+a.encode('utf8')+"=\""+self.attrib[a].encode('utf8')+"\""
+			s = s+" "+a.encode('utf8')+"="+XSS.quoteattr(self.attrib[a]).encode('utf8')
 		s = s+">\n"
 		for nl in self.geom.a_nodes:
 			s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
 		for k in sorted(self.tags.viewkeys()):
-			s = s+"\t\t<tag k=\""+k+"\" v=\""+self.tags[k].encode('utf8')+"\"/>\n"
+			s = s+"\t\t<tag k="+XSS.quoteattr(k)+" v="+XSS.quoteattr(self.tags[k]).encode('utf8')+"/>\n"
 		s = s+"\t</way>\n"
 		return s
 	def get_as_SQL_import_building(self):
@@ -402,22 +403,24 @@ class Adresses:
 		if not cle in self.a:
 			self.a[cle] = {'numeros':{},'batiments_complementaires':[]}
 		self.a[cle]['batiments_complementaires'] = self.a[cle]['batiments_complementaires'] + [b_id]
-def get_as_osm_xml_way(node_list,tags,attrib,modified):
-	s_modified = ""
-	if modified:
-		s_modified = "action=\"modify\" "
-	s = "\t<way id=\""+attrib['id']+"\" "+s_modified
-	for a in attrib:
-		if a == 'id' or a == 'modify':
-			continue
-		s = s+" "+a.encode('utf8')+"=\""+attrib[a].encode('utf8')+"\""
-	s = s+">\n"
-	for nl in node_list:
-		s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
-	for k in sorted(tags.viewkeys()):
-		s = s+"\t\t<tag k=\""+k+"\" v=\""+tags[k].encode('utf8')+"\"/>\n"
-	s = s+"\t</way>\n"
-	return s
+# def get_as_osm_xml_way(node_list,tags,attrib,modified):
+	# s_modified = ""
+	# if modified:
+		# s_modified = "action=\"modify\" "
+	# s = "\t<way id=\""+attrib['id']+"\" "+s_modified
+	# for a in attrib:
+		# if a == 'id' or a == 'modify':
+			# continue
+# #		s = s+" "+a.encode('utf8')+"=\""+attrib[a].encode('utf8')+"\""
+		# s = s+" "+a.encode('utf8')+"=\""+XSS.quoteattr(attrib[a]).encode('utf8')+"\""
+	# s = s+">\n"
+	# for nl in node_list:
+		# s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
+	# for k in sorted(tags.viewkeys()):
+		# # s = s+"\t\t<tag k=\""+k+"\" v=\""+tags[k].encode('utf8')+"\"/>\n"
+		# s = s+"\t\t<tag k=\""+k+"\" v=\""+XSS.quoteattr(tags[k]).encode('utf8')+"\"/>\n"
+	# s = s+"\t</way>\n"
+	# return s
 def load_nodes_from_xml_parse(xmlp):
 	for n in xmlp.iter('node'):
 		dtags = get_tags(n)
@@ -441,7 +444,7 @@ def download_ways_from_overpass(way_type,fn):
 #node(area:3600076381);rel(bn);(relation._["type"="associatedStreet"];);(._;>;);out meta;;
 	download_data(d_url,fn)
 def download_vector_from_cadastre(code_insee,code_cadastre,fn,suffixe):
-	d_url = 'http://cadastre.openstreetmap.fr/adresses/cadastre-housenumber/data/'+code_dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
+	d_url = 'http://cadastre.openstreetmap.fr/data/'+code_dept+'/'+code_cadastre+'/'+code_cadastre+'-'+suffixe+'.osm'
 	download_data(d_url,fn)
 def download_data(st_url,fn):
 	print(u'Telechargement depuis '+urllib.unquote(st_url))
