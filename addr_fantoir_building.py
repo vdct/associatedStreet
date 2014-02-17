@@ -50,31 +50,31 @@ class Dicts:
 			cle = normalize(cle)
 			self.fantoir[cle] = c[0]
 			self.add_voie('fantoir',cle)
-	def load_fantoir_text(self,insee):
-		fndep = 'fantoir/'+insee[0:2]+'0.txt'
-		if not os.path.exists(fndep):
-			print('Fichier FANTOIR "'+fndep+'" absent du répertoire')
-			print('Telechargeable ici : http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits')
-			print('Abandon')
-			os._exit(0)		
-		h = open(fndep,'r')
-		dictFantoir = {}
-		insee_com = insee[2:5]
-		for l in h:
-		# hors commune
-			if l[3:6] != insee_com:
-				continue
-		# enregistrement != Voie
-			if l[108:109] == ' ':
-				continue
-		# voie annulée
-			if l[73:74] != ' ':
-				continue
-			cle = ' '.join((l[11:15].rstrip().lstrip()+' '+l[15:41].rstrip().lstrip()).replace('-',' ').lstrip().split())
-			cle = normalize(cle)
-			self.fantoir[cle] = l[0:2]+l[3:11]
-			self.add_voie('fantoir',cle)
-		h.close()
+	# def load_fantoir_text(self,insee):
+		# fndep = 'fantoir/'+insee[0:2]+'0.txt'
+		# if not os.path.exists(fndep):
+			# print('Fichier FANTOIR "'+fndep+'" absent du répertoire')
+			# print('Telechargeable ici : http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits')
+			# print('Abandon')
+			# os._exit(0)		
+		# h = open(fndep,'r')
+		# dictFantoir = {}
+		# insee_com = insee[2:5]
+		# for l in h:
+		# # hors commune
+			# if l[3:6] != insee_com:
+				# continue
+		# # enregistrement != Voie
+			# if l[108:109] == ' ':
+				# continue
+		# # voie annulée
+			# if l[73:74] != ' ':
+				# continue
+			# cle = ' '.join((l[11:15].rstrip().lstrip()+' '+l[15:41].rstrip().lstrip()).replace('-',' ').lstrip().split())
+			# cle = normalize(cle)
+			# self.fantoir[cle] = l[0:2]+l[3:11]
+			# self.add_voie('fantoir',cle)
+		# h.close()
 	def load_chiffres(self):
 		self.chiffres = [	['0','ZERO'],
 							['1','UN'],
@@ -524,7 +524,9 @@ def	write_output(nodes,ways,adresses,libelle):
 		if 'OSM' in dicts.noms_voies[v]:
 			for w in dicts.ways_osm[v]['ids']:
 				for wn in ways.w['highway'][w].geom.a_nodes:
-					fout.write(nodes.n[wn].get_as_osm_xml_node())
+					if not nodes.n[wn].sent:
+						fout.write(nodes.n[wn].get_as_osm_xml_node())
+						nodes.n[wn].sent = True
 
 	# ways
 	## batiments porteurs d'une adresse
@@ -547,6 +549,7 @@ def	write_output(nodes,ways,adresses,libelle):
 		if 'OSM' in dicts.noms_voies[v]:
 			for w in dicts.ways_osm[v]['ids']:
 				fout.write((ways.w['highway'][w]).get_as_osm_xml_way())
+	# en prevision des autres fichiers, raz du statut "envoye" des nodes
 				for wn in ways.w['highway'][w].geom.a_nodes:
 					nodes.n[wn].sent = False
 
