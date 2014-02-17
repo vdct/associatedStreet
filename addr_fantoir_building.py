@@ -528,6 +528,30 @@ def	write_output(nodes,ways,adresses,libelle):
 						fout.write(nodes.n[wn].get_as_osm_xml_node())
 						nodes.n[wn].sent = True
 
+	# RAZ du statut 'envoye' des nodes
+		for num in adresses.a[v]['numeros']:
+			numadresse = adresses.a[v]['numeros'][num]
+	## 	point adresse isole
+			if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
+				numadresse.node.sent = False
+	## 	point adresse reference par un batiment
+			for eb in numadresse.building_for_addr_node:
+				for ebn in ways.w['building'][eb].geom.a_nodes:
+					nodes.n[ebn].sent = False
+	##	nodes des batiments directement taggues en hsnr
+			for eb in numadresse.addr_as_building_way:
+				for ebn in ways.w['building'][eb].geom.a_nodes:
+					nodes.n[ebn].sent = False
+	##	nodes des batiments complementaires
+		for eb in adresses.a[v]['batiments_complementaires']:
+			for ebn in ways.w['building'][eb].geom.a_nodes:
+				nodes.n[ebn].sent = False
+	## nodes des highways
+		if 'OSM' in dicts.noms_voies[v]:
+			for w in dicts.ways_osm[v]['ids']:
+				for wn in ways.w['highway'][w].geom.a_nodes:
+					nodes.n[wn].sent = False
+	
 	# ways
 	## batiments porteurs d'une adresse
 		for num in adresses.a[v]['numeros']:
