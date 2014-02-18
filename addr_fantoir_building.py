@@ -50,31 +50,6 @@ class Dicts:
 			cle = normalize(cle)
 			self.fantoir[cle] = c[0]
 			self.add_voie('fantoir',cle)
-	# def load_fantoir_text(self,insee):
-		# fndep = 'fantoir/'+insee[0:2]+'0.txt'
-		# if not os.path.exists(fndep):
-			# print('Fichier FANTOIR "'+fndep+'" absent du répertoire')
-			# print('Telechargeable ici : http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits')
-			# print('Abandon')
-			# os._exit(0)		
-		# h = open(fndep,'r')
-		# dictFantoir = {}
-		# insee_com = insee[2:5]
-		# for l in h:
-		# # hors commune
-			# if l[3:6] != insee_com:
-				# continue
-		# # enregistrement != Voie
-			# if l[108:109] == ' ':
-				# continue
-		# # voie annulée
-			# if l[73:74] != ' ':
-				# continue
-			# cle = ' '.join((l[11:15].rstrip().lstrip()+' '+l[15:41].rstrip().lstrip()).replace('-',' ').lstrip().split())
-			# cle = normalize(cle)
-			# self.fantoir[cle] = l[0:2]+l[3:11]
-			# self.add_voie('fantoir',cle)
-		# h.close()
 	def load_chiffres(self):
 		self.chiffres = [	['0','ZERO'],
 							['1','UN'],
@@ -454,7 +429,7 @@ def	executeSQL_INSEE(fnsql,code_insee):
 def purge_pg_tables(code_insee):
 	str_query = '''SELECT	tablename
 					FROM 	pg_tables
-					WHERE	tablename like \'%'''+code_insee+'''\';'''
+					WHERE	upper(tablename) like \'%'''+code_insee.upper()+'''\';'''
 	cur_sql = pgc.cursor()
 	cur_sql.execute(str_query)
 	str_del = ''
