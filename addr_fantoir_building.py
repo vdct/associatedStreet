@@ -566,22 +566,24 @@ def	write_output(nodes,ways,adresses,libelle):
 				for eb in numadresse.addr_as_building_way:
 					fout.write("\t\t<member type=\"way\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
 					
-		street_name = v.title()
+		street_name = v.title().encode('utf8')
+		if 'adresse' in dicts.noms_voies[v]:
+			street_name = dicts.noms_voies[v]['adresse'].encode('utf8')
 		if 'OSM' in dicts.noms_voies[v]:
 			street_name =  dicts.noms_voies[v]['OSM'].encode('utf8')
 			for m in dicts.ways_osm[v]['ids']:
 				fout.write("		<member type=\"way\" ref=\""+m+"\" role=\"street\"/>\n")
 			nb_voies_osm += 1
 		else:
-			ftmpkeys.write('voie absente dans OSM     	 : '+dicts.noms_voies[v]['adresse'].encode('utf8')+'\n')
-			street_name =  dicts.noms_voies[v]['adresse'].encode('utf8')
+			ftmpkeys.write('voie absente dans OSM     	 : '+street_name+'\n')
 		fout.write("		<tag k=\"type\" v=\"associatedStreet\"/>\n")
-		fout.write("		<tag k=\"name\" v=\""+street_name+"\"/>\n")
+		fout.write("		<tag k=\"name\" v="+XSS.quoteattr(street_name)+"/>\n")
 		if v in dicts.fantoir:
 			fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dicts.fantoir[v]+"\"/>\n")
 			nb_voies_fantoir += 1
 		else:
-			ftmpkeys.write('voie absente dans le FANTOIR : '+dicts.noms_voies[v]['adresse'].encode('utf8')+'\n')
+			s_voie = dicts.noms_voies[v]['adresse'] or v
+			ftmpkeys.write('voie absente dans le FANTOIR : '+street_name+'\n')
 		fout.write("	</relation>\n")
 		nb_voies_total +=1
 		fout.write("</osm>")
