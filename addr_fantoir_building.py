@@ -195,29 +195,28 @@ def get_line_in_st_line_format(nodelist):
 	s = 'ST_LineFromText(\'LINESTRING('
 	l_coords = []
 	for id in nodelist:
-		l_coords.append(str(nodes.n[id].lon)+' '+str(nodes.n[id].lat))
+		l_coords.append(str(nodes.n[id].attribs['lon'])+' '+str(nodes.n[id].attribs['lat']))
 	s = s+','.join(l_coords)+')\')'
 	return s
 class Node:
-	def __init__(self,lon,lat,id,version,tags):
-		self.lon = lon
-		self.lat = lat
-		self.id = id
-		self.version = version
+	def __init__(self,attribs,tags):
+		self.attribs = attribs
 		self.tags = tags
 		self.sent = False
 		self.modified = False
 	def get_geom_as_text(self):
-		strp = 'ST_PointFromText(\'POINT('+str(self.lon)+' '+str(self.lat)+')\',4326)'
+		strp = 'ST_PointFromText(\'POINT('+str(self.attribs['lon'])+' '+str(self.attribs['lat'])+')\',4326)'
 		return strp
 	def move_to(self,lon,lat):
-		self.lon = lon
-		self.lat = lat
+		self.attribs['lon'] = lon
+		self.attribs['lat'] = lat
 	def get_as_osm_xml_node(self):
-		s_modified = ""
+		s = "\t<node id="+XSS.quoteattr(self.attribs['id'])
 		if self.modified:
-			s_modified = " action=\"modify\" "
-		s = "\t<node id=\""+str(self.id)+"\" "+s_modified+"lat=\""+str(self.lat)+"\" lon=\""+str(self.lon)+"\" visible=\"true\" version=\""+str(self.version)+"\""
+			s = s+" action=\"modify\" "
+		for a in self.attribs:
+			if a != 'id':
+				s = s+" "+a.encode('utf8')+"="+XSS.quoteattr(str(self.attribs[a])).encode('utf8')
 		if len(self.tags) == 0:
 			s = s+"/>\n"
 		else:
@@ -231,20 +230,20 @@ class Nodes:
 		self.n = {}
 		self.min_id = 0
 	def load_xml_node(self,xml_node,tags):
-		id = xml_node.get('id')
-		version = xml_node.get('version')
-		if not version:
-			version = 0
-		self.n[id]= Node(xml_node.get('lon'),xml_node.get('lat'),id,version,tags)
+		id = xml_node.attrib['id']
+		if 'version' not in xml_node.attrib:
+			xml_node.attrib['version'] = 0
+		self.n[id]= Node(xml_node.attrib,tags)
 		self.min_id = min(self.min_id,int(id))
 #		if id == '535300376':
 #			os._exit(0)
 	def load_new_node_from_xml(self,xml_node,tags):
-		n = self.add_new_node(xml_node.get('lon'),xml_node.get('lat'),tags)
+		n = self.add_new_node(xml_node.attrib,tags)
 		return n
 	def add_new_node(self,lon,lat,tags):
 		id = str(self.min_id - 1)
-		self.n[id] = Node(lon,lat,id,'0',tags)
+		attribs = {'lon':lon,'lat':lat,'version':0,'id':id}
+		self.n[id] = Node(attribs,tags)
 		self.n[id].modified = True
 		self.min_id = min(self.min_id,int(id))
 		return id
@@ -255,7 +254,7 @@ class WayGeom:
 		res = '\'LINESTRING('
 		a_n = []
 		for ni in self.a_nodes:
-			a_n.append(str(nodes.n[ni].lon)+' '+str(nodes.n[ni].lat))
+			a_n.append(str(nodes.n[ni].attribs['lon'])+' '+str(nodes.n[ni].attribs['lat']))
 		res = res+','.join(a_n)+')\''
 		return res	
 class Way:
@@ -533,32 +532,32 @@ def	write_output(nodes,ways,adresses,libelle):
 			numadresse = adresses.a[v]['numeros'][num]
 			for eb in (numadresse.addr_as_building_way + numadresse.building_for_addr_node):
 				fout.write(ways.w['building'][eb].get_as_osm_xml_way())
-	# en prevision des autres fichiers, raz du statut "envoye" des nodes
-				for ebn in ways.w['building'][eb].geom.a_nodes:
-					nodes.n[ebn].sent = False
+	# # en prevision des autres fichiers, raz du statut "envoye" des nodes
+				# for ebn in ways.w['building'][eb].geom.a_nodes:
+					# nodes.n[ebn].sent = False
 
 	##	batiments complementaires
 		for eb in adresses.a[v]['batiments_complementaires']:
 			fout.write((ways.w['building'][eb]).get_as_osm_xml_way())
-	# en prevision des autres fichiers, raz du statut "envoye" des nodes
-			for ebn in ways.w['building'][eb].geom.a_nodes:
-				nodes.n[ebn].sent = False
+	# # en prevision des autres fichiers, raz du statut "envoye" des nodes
+			# for ebn in ways.w['building'][eb].geom.a_nodes:
+				# nodes.n[ebn].sent = False
 
 	## ways des highways
 		if 'OSM' in dicts.noms_voies[v]:
 			for w in dicts.ways_osm[v]['ids']:
 				fout.write((ways.w['highway'][w]).get_as_osm_xml_way())
-	# en prevision des autres fichiers, raz du statut "envoye" des nodes
-				for wn in ways.w['highway'][w].geom.a_nodes:
-					nodes.n[wn].sent = False
+	# # en prevision des autres fichiers, raz du statut "envoye" des nodes
+				# for wn in ways.w['highway'][w].geom.a_nodes:
+					# nodes.n[wn].sent = False
 
 	# relations	
 		fout.write("\t<relation id=\""+str(nodes.min_id - 1)+"\" action=\"modify\" visible=\"true\">\n")
 		for num in adresses.a[v]['numeros']:
 			numadresse = adresses.a[v]['numeros'][num]
 			if not (numadresse.addr_as_building_way or numadresse.addr_as_node_on_building):
-				fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.id)+"\" role=\"house\"/>\n")
-				nodes.n[numadresse.node.id].sent = False
+				fout.write("\t\t<member type=\"node\" ref=\""+str(numadresse.node.attribs['id'])+"\" role=\"house\"/>\n")
+				nodes.n[numadresse.node.attribs['id']].sent = False
 			else:
 				for eb in numadresse.addr_as_node_on_building:
 					fout.write("\t\t<member type=\"node\" ref=\""+str(eb)+"\" role=\"house\"/>\n")
@@ -751,7 +750,7 @@ def main(args):
 			ad = adresses.a[voie]['numeros'][num]
 			str_query = str_query+'''INSERT INTO adresses_'''+code_insee+''' 
 							(SELECT ST_Transform('''+ad.node.get_geom_as_text()+''',
-							2154),'''+str(ad.node.id)+''',\''''+num+'''\',\''''+voie+'''\');'''
+							2154),'''+str(ad.node.attribs['id'])+''',\''''+num+'''\',\''''+voie+'''\');'''
 
 		if idx%100 == 0:
 			cur_adresses.execute(str_query+"COMMIT;")
