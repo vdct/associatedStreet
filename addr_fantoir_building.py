@@ -216,7 +216,11 @@ class Node:
 			s = s+" action=\"modify\" "
 		for a in self.attribs:
 			if a != 'id':
-				s = s+" "+a.encode('utf8')+"="+XSS.quoteattr(str(self.attribs[a])).encode('utf8')
+				if a == 'user':
+					v = XSS.quoteattr(self.attribs[a]).encode('utf8')
+				else:
+					v = XSS.quoteattr(str(self.attribs[a]).encode('utf8'))
+				s = s+" "+a+"="+v
 		if len(self.tags) == 0:
 			s = s+"/>\n"
 		else:
@@ -230,9 +234,9 @@ class Nodes:
 		self.n = {}
 		self.min_id = 0
 	def load_xml_node(self,xml_node,tags):
-		id = xml_node.attrib['id']
+		id = str(xml_node.attrib['id'])
 		if 'version' not in xml_node.attrib:
-			xml_node.attrib['version'] = 0
+			xml_node.attrib['version'] = '0'
 		self.n[id]= Node(xml_node.attrib,tags)
 		self.min_id = min(self.min_id,int(id))
 #		if id == '535300376':
@@ -314,7 +318,13 @@ class Way:
 		for a in self.attrib:
 			if a == 'id' or a == 'modify':
 				continue
-			s = s+" "+a.encode('utf8')+"="+XSS.quoteattr(self.attrib[a]).encode('utf8')
+			else:
+				if a == 'user':
+					v = XSS.quoteattr(self.attrib[a]).encode('utf8')
+				else:
+					v = XSS.quoteattr(str(self.attrib[a]).encode('utf8'))
+				#s = s+" "+a+"="+v
+				s = s+" "+a.encode('utf8')+"="+v
 		s = s+">\n"
 		for nl in self.geom.a_nodes:
 			s = s+"\t\t<nd ref=\""+str(nl)+"\" />\n"
@@ -463,7 +473,6 @@ def	write_output(nodes,ways,adresses,libelle):
 	for v in adresses.a:
 		if not adresses.a[v]['numeros']:
 			continue
-#		fout = open(dirout+'/'+code_cadastre+'_'+dicts.noms_voies[v]['parcelle'].replace(' ','_')+'.osm','w')
 		fout = open(dirout+'/'+code_cadastre+'_'+v.replace(' ','_')+'.osm','w')
 		fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 		fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
