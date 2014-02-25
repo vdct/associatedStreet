@@ -762,10 +762,10 @@ def main(args):
 							2154),'''+str(ad.node.attribs['id'])+''',\''''+num+'''\',\''''+voie+'''\');'''
 
 		if idx%100 == 0:
-			cur_adresses.execute(str_query+"COMMIT;")
+			cur_adresses.execute(str_query.encode('utf8')+"COMMIT;")
 			str_query = ""
 	if str_query != "":
-		cur_adresses.execute(str_query+"COMMIT;")
+		cur_adresses.execute(str_query.encode('utf8')+"COMMIT;")
 
 	highway_rep = 'cache_highways'
 	if not os.path.exists(highway_rep):
