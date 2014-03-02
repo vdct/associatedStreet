@@ -4,7 +4,8 @@ import copy
 import glob
 import gc
 import urllib,urllib2
-import sys,shutil
+import sys
+import shutil
 import os,os.path
 import psycopg2
 from pg_connexion import get_pgc
@@ -417,6 +418,7 @@ def download_vector_from_cadastre(code_insee,code_cadastre,fn,suffixe):
 	download_data(d_url,fn)
 def download_data(st_url,fn):
 	print(u'Telechargement depuis '+urllib.unquote(st_url))
+	sys.stdout.flush()
 	try:
 		resp = urllib2.urlopen(st_url)
 		target_file = open(fn,'wb')
@@ -617,8 +619,6 @@ def	write_output(nodes,ways,adresses,libelle):
 def main(args):
 	if len(args) < 2:
 		print('USAGE : python addr_fantoir_building.py <code INSEE> <code Cadastre>')
-		print('1 : adresses comme points sur les bâtiments')
-		print('2 : adresses comme tags des ways building')
 		os._exit(0)
 	global pgc
 	pgc = get_pgc()
@@ -671,10 +671,13 @@ def main(args):
 		download_ways_from_overpass('building',fnbuilding)
 			
 	print('mise en cache des buildings...')
+	sys.stdout.flush()
 	xmlbuldings = ET.parse(fnbuilding)
 	print('nodes...')
+	sys.stdout.flush()
 	load_nodes_from_xml_parse(xmlbuldings)
 	print('buildings...')
+	sys.stdout.flush()
 	load_ways_from_xml_parse(xmlbuldings,'building')
 	del xmlbuldings
 	gc.collect()
@@ -682,6 +685,7 @@ def main(args):
 	executeSQL_INSEE('create_tables__com__.sql',code_insee)
 
 	print('chargement des polygones...')
+	sys.stdout.flush()
 	cur_buildings = pgc.cursor()
 	str_query = ""
 	for idx,id in enumerate(ways.w['building']):
@@ -695,6 +699,7 @@ def main(args):
 		cur_buildings.execute(str_query+"COMMIT;")
 
 	print('chargement des segments...')
+	sys.stdout.flush()
 	str_query = ""
 	for idx,id in enumerate(ways.w['building']):
 		if not ways.w['building'][id].is_valid:
@@ -710,14 +715,17 @@ def main(args):
 
 	print('mise en cache des parcelles...')
 	print('nodes...')
+	sys.stdout.flush()
 	xmlparcelles = ET.parse(fnparcelles)
 	load_nodes_from_xml_parse(xmlparcelles)
 	print('parcelles...')
+	sys.stdout.flush()
 	load_ways_from_xml_parse(xmlparcelles,'parcelle')
 	del xmlparcelles
 	gc.collect()
 
 	print('chargement...')
+	sys.stdout.flush()
 	cur_parcelles = pgc.cursor()
 	str_query = ""
 	for idx,id in enumerate(ways.w['parcelle']):
@@ -730,6 +738,7 @@ def main(args):
 
 	print('mise en cache des points adresses...')
 	print('nodes...')
+	sys.stdout.flush()
 	xmladresses = ET.parse(fnadresses)
 	dict_node_relations = {}
 	for asso in xmladresses.iter('relation'):
@@ -752,6 +761,7 @@ def main(args):
 				adresses.add_adresse(ad)
 				
 	print('chargement...')
+	sys.stdout.flush()
 	cur_adresses = pgc.cursor()
 	str_query = ""
 	for idx,voie in enumerate(adresses.a):
@@ -775,6 +785,7 @@ def main(args):
 		download_ways_from_overpass('highway',fnhighway)
 	
 	print('mise en cache des voies...')
+	sys.stdout.flush()
 	xmlways = ET.parse(fnhighway)
 	load_nodes_from_xml_parse(xmlways)
 	load_ways_from_xml_parse(xmlways,'highway')
@@ -791,6 +802,7 @@ def main(args):
 				dicts.ways_osm[name_norm]['ids'].append(w.get('id'))
 
 	print('Traitements PostGIS...')
+	sys.stdout.flush()
 	executeSQL_INSEE('adresses_buildings.sql',code_insee)
 
 # duplication des instances de nodes,ways,adresses car modifs differentes selon le style des adresses
@@ -806,6 +818,7 @@ def main(args):
 	
 	# tierce == '1':
 	print('Report des adresses sur les buildings en tant que nouveaux points...')
+	sys.stdout.flush()
 	cur_addr_node_building = pgc.cursor()
 	str_query = '''SELECT 	lon,
 							lat,
@@ -824,6 +837,7 @@ def main(args):
 		
 	# tierce == '2':
 	print('Report des adresses sur les buildings en tant que nouveau tag...')
+	sys.stdout.flush()
 	# batiments modifies
 	cur_addr_way_building = pgc.cursor()
 	str_query = '''SELECT id_building::integer,
@@ -837,6 +851,7 @@ def main(args):
 		dict_objets_pour_output['2']['adresses'].a[c[3]]['numeros'][c[2]].add_addr_as_building(str(c[0]))
 
 	print('Ajout des autres buildings de la voie...')
+	sys.stdout.flush()
 	# autres batiments des parcelles de la voie
 	cur_addr_building_comp = pgc.cursor()
 	str_query = '''SELECT id_building::integer,
