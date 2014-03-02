@@ -475,7 +475,7 @@ def	write_output(nodes,ways,adresses,libelle):
 			continue
 		fout = open(dirout+'/'+code_cadastre+'_'+v.replace(' ','_')+'.osm','w')
 		fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-		fout.write("<osm version=\"0.6\" upload=\"false\" generator=\"addr_fantoir_building.py\">\n")
+		fout.write("<osm version=\"0.6\" generator=\"addr_fantoir_building.py\">\n")
 	# nodes
 		for num in adresses.a[v]['numeros']:
 			numadresse = adresses.a[v]['numeros'][num]
