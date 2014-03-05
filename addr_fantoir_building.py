@@ -177,7 +177,6 @@ def normalize(s):
 
 	# articles
 	for c in dicts.mot_a_blanc:
-		# c = c.encode('utf8')
 		s = s.replace(' '+c+' ',' ')
 
 	# titres, etc.
@@ -603,12 +602,13 @@ def	write_output(nodes,ways,adresses,libelle):
 	s = 			"Nombre de relations creees  : "+str(nb_voies_total)
 	print(s)
 	ftmpkeys.write(s+'\n')
-	s = "     avec code FANTOIR      : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)"
-	print(s)
-	ftmpkeys.write(s+'\n')
-	s = "     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm*100/nb_voies_total))+"%)"
-	print(s)
-	ftmpkeys.write(s+'\n')
+	if nb_voies_total > 0:
+		s = "     avec code FANTOIR      : "+str(nb_voies_fantoir)+" ("+str(int(nb_voies_fantoir*100/nb_voies_total))+"%)"
+		print(s)
+		ftmpkeys.write(s+'\n')
+		s = "     avec rapprochement OSM : "+str(nb_voies_osm)+" ("+str(int(nb_voies_osm*100/nb_voies_total))+"%)"
+		print(s)
+		ftmpkeys.write(s+'\n')
 	ftmpkeys.close()
 
 	for fosm in glob.glob(dirout+'/*.osm'):
