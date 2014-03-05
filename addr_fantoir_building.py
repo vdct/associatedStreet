@@ -109,7 +109,6 @@ class Dicts:
 									'I'    :'UN'}
 	def load_abrev_type_voie(self):
 		fn = os.path.join(os.path.dirname(__file__), 'abrev_type_voie.txt')
-		#fn = 'abrev_type_voie.txt'
 		f = open(fn)
 		for l in f:
 			c = (l.splitlines()[0]).split('\t')
@@ -118,7 +117,6 @@ class Dicts:
 	def load_osm_insee(self):
 		finsee_path = os.path.join(os.path.dirname(__file__),'osm_id_ref_insee.csv')
 		finsee = open(finsee_path,'r')
-#		finsee = open('osm_id_ref_insee.csv','r')
 		for e in finsee:
 			c = (e.splitlines()[0]).split(',')
 			self.osm_insee[str(c[1])] = int(c[0])
@@ -151,6 +149,7 @@ def replace_type_voie(s,nb):
 	s = dicts.abrev_type_voie[spd]+' '+spf
 	return s
 def normalize(s):
+	s = s.encode('ascii','ignore')
 	s = s.upper()				# tout en majuscules
 	s = s.replace('-',' ')		# separateur espace
 	s = s.replace('\'',' ')		# separateur espace
@@ -178,6 +177,7 @@ def normalize(s):
 
 	# articles
 	for c in dicts.mot_a_blanc:
+		# c = c.encode('utf8')
 		s = s.replace(' '+c+' ',' ')
 
 	# titres, etc.
@@ -749,7 +749,6 @@ def main(args):
 						dict_node_relations[n.get('ref')] = []
 					dict_node_relations[n.get('ref')] = dict_node_relations[n.get('ref')]+[normalize(t.get('v'))]
 			dicts.add_voie('adresse',t.get('v'))
-
 	load_nodes_from_xml_parse(xmladresses)
 	for n in xmladresses.iter('node'):
 		dtags = get_tags(n)
