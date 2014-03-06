@@ -591,7 +591,10 @@ def	write_output(nodes,ways,adresses,libelle):
 			fout.write("		<tag k=\"ref:FR:FANTOIR\" v=\""+dicts.fantoir[v]+"\"/>\n")
 			nb_voies_fantoir += 1
 		else:
-			s_voie = dicts.noms_voies[v]['adresse'] or v
+			# if 'adresse' in dicts.noms_voies[v]:
+				# s_voie = dicts.noms_voies[v]['adresse']
+			# else:
+				# s_voie = v
 			ftmpkeys.write('voie absente dans le FANTOIR : '+street_name+'\n')
 		fout.write("	</relation>\n")
 		nb_voies_total +=1
