@@ -149,7 +149,7 @@ def replace_type_voie(s,nb):
 	s = dicts.abrev_type_voie[spd]+' '+spf
 	return s
 def normalize(s):
-	s = s.encode('ascii','ignore')
+	# s = s.encode('ascii','ignore')
 	s = s.upper()				# tout en majuscules
 	s = s.replace('-',' ')		# separateur espace
 	s = s.replace('\'',' ')		# separateur espace
@@ -158,6 +158,7 @@ def normalize(s):
 	for l in iter(dicts.lettre_a_lettre):
 		for ll in dicts.lettre_a_lettre[l]:
 			s = s.replace(ll,l)
+	s = s.encode('ascii','ignore')
 	
 	# type de voie
 	abrev_trouvee = False
