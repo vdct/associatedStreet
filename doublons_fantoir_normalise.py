@@ -202,7 +202,7 @@ dicts.load_chiffres_romains()
 dicts.load_mot_a_blanc()
 dicts.load_osm_insee()
 
-str_query = 'SELECT DISTINCT code_insee FROM fantoir_voie ORDER BY 1;'
+str_query = "SELECT DISTINCT code_insee FROM fantoir_voie ORDER BY 1;"
 cur_insee = pgc.cursor()
 cur_insee.execute(str_query)
 
@@ -210,7 +210,8 @@ nb_villes = 0
 nb_villes_avec_doublons = 0
 nb_villes_sans_doublons = 0
 nb_voies = 0
-nb_doublons = 0
+nb_vrais_doublons = 0
+nb_homonymes_normalises = 0
 for c_insee in cur_insee:
 	nb_villes += 1
 	avec_doublon = False
@@ -228,19 +229,21 @@ for c_insee in cur_insee:
 		nom_voie = ' '.join(c[1].replace('-',' ').split())
 		cle = normalize(nom_voie)
 		if cle not in dic_fantoir:
-			dic_fantoir[cle] = []
-		dic_fantoir[cle].append([c[0],nom_voie])
+			dic_fantoir[cle] = {}
+		if not nom_voie in dic_fantoir[cle]:
+			dic_fantoir[cle][nom_voie] = []
+		dic_fantoir[cle][nom_voie].append(c[0])
 	for k,v in dic_fantoir.iteritems():
 		if len(v)>1:
-			nb_doublons += 1
+			nb_homonymes_normalises += 1
 			avec_doublon = True
 			for i in v:
-				fr.write('%s : %s(%s)\n' % (k, i[1], i[0]))
+				fr.write('%s : %s\n' % (k, i))
 	if 	avec_doublon:
 		nb_villes_avec_doublons += 1
 	else:
 		nb_villes_sans_doublons += 1
-s_bilan = (u'Bilan :\n\t{:d} villes dont :\n\t\t* {:d} villes avec doublons\n\t\t* {:d} villes sans doublons\n\t{:d} voies dont :\n\t\t* {:d} noms normalisés à codes Fantoir multiples ({:.2%})'.format(nb_villes,nb_villes_avec_doublons,nb_villes_sans_doublons,nb_voies,nb_doublons,(float(nb_doublons)/nb_voies)))
+s_bilan = (u'Bilan :\n\t{:d} villes dont :\n\t\t* {:d} villes avec doublons\n\t\t* {:d} villes sans doublons\n\t{:d} voies dont :\n\t\t* {:d} noms normalisés identiques mais noms Fantoir différents ({:.2%})'.format(nb_villes,nb_villes_avec_doublons,nb_villes_sans_doublons,nb_voies,nb_homonymes_normalises,(float(nb_homonymes_normalises)/nb_voies)))
 print(s_bilan)
 fr.write(s_bilan.encode('utf8'))
 fr.close()
