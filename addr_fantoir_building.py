@@ -671,8 +671,8 @@ def main(args):
 	adresses = Adresses()
 
 	fnbuilding = building_rep+'/buildings_'+code_insee+'.osm'
-	if not os.path.exists(fnbuilding):
-		download_ways_from_overpass('building',fnbuilding)
+	# if not os.path.exists(fnbuilding):
+	download_ways_from_overpass('building',fnbuilding)
 			
 	print('mise en cache des buildings...')
 	sys.stdout.flush()
@@ -784,8 +784,8 @@ def main(args):
 	if not os.path.exists(highway_rep):
 		os.mkdir(highway_rep)
 	fnhighway = highway_rep+'/highways_'+code_insee+'.osm'
-	if not os.path.exists(fnhighway):
-		download_ways_from_overpass('highway',fnhighway)
+	# if not os.path.exists(fnhighway):
+	download_ways_from_overpass('highway',fnhighway)
 	
 	print('mise en cache des voies...')
 	sys.stdout.flush()
