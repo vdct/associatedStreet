@@ -475,7 +475,11 @@ def	write_output(nodes,ways,adresses,libelle):
 	for v in adresses.a:
 		if not adresses.a[v]['numeros']:
 			continue
-		fout = open(dirout+'/'+code_cadastre+'_'+v.replace(' ','_')+'.osm','w')
+                if 'OSM' in dicts.noms_voies[v]:
+			fout = open(dirout+'/'+code_cadastre+'_'+v.replace(' ','_')+'.osm','w')
+		else:
+                        fout = open(dirout+'/'+code_cadastre+'__sans_voie_OSM__'+v.replace(' ','_')+'.osm','w')
+
 		fout.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 		fout.write("<osm version=\"0.6\" generator=\"addr_fantoir_building.py\">\n")
 	# nodes
