@@ -187,7 +187,7 @@ def normalize(s):
 	# chiffres romains
 	sp = s.split()
 
-	if sp[-1] in dicts.chiffres_romains:
+	if len(sp)>1 and sp[-1] in dicts.chiffres_romains:
 		sp[-1] = dicts.chiffres_romains[sp[-1]]
 		s = ' '.join(sp)
 			
