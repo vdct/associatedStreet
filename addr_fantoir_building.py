@@ -187,9 +187,10 @@ def normalize(s):
 	# chiffres romains
 	sp = s.split()
 
-	if len(sp)>1 and sp[-1] in dicts.chiffres_romains:
-		sp[-1] = dicts.chiffres_romains[sp[-1]]
-		s = ' '.join(sp)
+	if len(sp)>1:
+		if sp[-1] in dicts.chiffres_romains:
+			sp[-1] = dicts.chiffres_romains[sp[-1]]
+			s = ' '.join(sp)
 			
 	return s
 def get_line_in_st_line_format(nodelist):
