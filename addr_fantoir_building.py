@@ -408,8 +408,8 @@ def get_tags(xmlo):
 	return dtags
 def download_ways_from_overpass(way_type,fn):
 	s_domaine = 'oapi-fr.openstreetmap.fr/oapi'
-	if code_dept[0:2] == '97':
-		s_domaine = 'overpass-api.de/api'
+	# if code_dept[0:2] == '97':
+	s_domaine = 'overpass-api.de/api'
 	d_url = urllib.quote('http://'+s_domaine+'/interpreter?data=node(area:'+str(3600000000+dicts.osm_insee[code_insee])+');way(bn);(way._["'+way_type+'"];node(w););out meta;',':/?=')
 	d_url = d_url.replace('way._','way%2E%5F').replace('area:','area%3A')
 #node(area:3600076381);rel(bn);(relation._["type"="associatedStreet"];);(._;>;);out meta;;
