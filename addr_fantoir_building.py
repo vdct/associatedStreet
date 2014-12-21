@@ -16,6 +16,7 @@ import xml.sax.saxutils as XSS
 import zipfile
 
 debut_total = time.time()
+os.umask(0000)
 
 class Dicts:
 	def __init__(self):
