@@ -2,7 +2,8 @@ addr_fantoir_building.py
 
 Reprend les fonctionnalités de addrfantoir.py et ajoute le rattachement des n° d'adresse aux bâtiments sous forme de tag porté par le way building.
 
-Requiert le script adresses_buildings.sql et un accès en RW à une base PostGIS.
+Requiert le script adresses_buildings.sql, accès en RO à une base OSM Monde (schema osm2pgsql) et un accès en RW à une base PostGIS.
+
 
 Le fichier pg_connexion.py.txt est à renommer en pg_connexion.py et à adapter en modifiant les parties entre <>.
 
