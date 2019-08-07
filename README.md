@@ -12,7 +12,7 @@ addrfantoir.py : recherche du code FANTOIR des voies pour enrichissement d'un fi
 Le fichier des relations provient de http://37.187.60.59/cadastre-housenumber/adresses.php
 En local, il faut dans le répertoire où se situe ce fichier ET le script python, ajouter :
 - le fichier Fantoir brut du département correspondant, obtenu (par zip de régions) ici :
-http://www.collectivites-locales.gouv.fr/mise-a-disposition-fichier-fantoir-des-voies-et-lieux-dits
+https://www.collectivites-locales.gouv.fr/mise-a-disposition-gratuite-fichier-des-voies-et-des-lieux-dits-fantoir
 - le fichier osm_id_ref_insee.csv qui donne pour chaque code INSEE le n° de relation admin 8 dans OSM. Cette relation est utilisée pour extraire tous les highways nommés de la commune, via un appel Overpass
 
 Le script a besoin de 2 paramètres, demandés en invite de commande : le nom du fichier d'adresses, et le code INSEE de la commune correspondante (pour filtrer les bonnes entrées du FANTOIR et interroger l'Overpass)
